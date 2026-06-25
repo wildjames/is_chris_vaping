@@ -22,7 +22,7 @@
 #define LCD_DC    2
 #define LCD_RST   4
 #define LCD_BLK  32
-#define LCD_BRIGHTNESS 0
+#define LCD_BRIGHTNESS 25
 
 Adafruit_ST7789 tft = Adafruit_ST7789(LCD_CS, LCD_DC, LCD_RST);
 
@@ -166,8 +166,6 @@ void setup() {
     // Activity detected - reset light sleep phase
     inLightSleepPhase = false;
     lightSleepStartTime = 0;
-  } else if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
-    Serial.println("Woke from light sleep (timer)");
   }
 
   // Disable WiFi to prevent GPIO2 conflict with display DC line
@@ -177,6 +175,7 @@ void setup() {
   pinMode(LCD_BLK, OUTPUT);
   analogWrite(LCD_BLK, LCD_BRIGHTNESS);
   tft.init(170, 320);
+  tft.writeCommand(ST77XX_DISPON);
   tft.setRotation(0);
   tft.setSPISpeed(80000000);  // 80MHz SPI for fast screen updates
   tft.fillScreen(ST77XX_BLACK);
@@ -310,6 +309,11 @@ void loop() {
     uint64_t wakeupPinMask = (1ULL << COIL_A_PIN) | (1ULL << COIL_B_PIN);
     esp_sleep_enable_ext1_wakeup(wakeupPinMask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
+    // Pin the tft brightness to 0 before sleeping
+    analogWrite(LCD_BLK, 0);
+    // and disable the display to save power
+    tft.writeCommand(ST77XX_DISPOFF);
+
     // Track how long we've been in the light sleep phase
     if (!inLightSleepPhase) {
       inLightSleepPhase = true;
@@ -324,10 +328,9 @@ void loop() {
       Serial.flush();
       esp_deep_sleep_start();
     } else {
-      // Light sleep - wake every 500ms to check coils, or on ext1
+      // Light sleep - wake on ext1
       Serial.println("Entering light sleep...");
       Serial.flush();
-      esp_sleep_enable_timer_wakeup(500000);  // 500ms in microseconds
       esp_light_sleep_start();
       // Execution resumes here after light sleep wakeup
       Serial.println("Light sleep wakeup");
