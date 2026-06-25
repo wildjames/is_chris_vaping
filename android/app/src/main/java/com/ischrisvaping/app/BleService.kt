@@ -11,9 +11,12 @@ import android.bluetooth.le.ScanSettings
 import android.content.Intent
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
+import android.widget.Toast
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -44,8 +47,8 @@ class BleService : Service() {
 
     private val httpExecutor = Executors.newSingleThreadExecutor()
 
-    // TODO: Set your server URL here
-    private val serverUrl = "https://example.com/api/vape-status"
+    private var serverUrl: String = ""
+    private var authToken: String = ""
 
     var currentData: String = ""
         private set
@@ -67,6 +70,10 @@ class BleService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
+        serverUrl = prefs.getString("server_url", "") ?: ""
+        authToken = prefs.getString("auth_token", "") ?: ""
 
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
@@ -282,10 +289,15 @@ class BleService : Service() {
     private fun postToServer(coil: String, event: String) {
         httpExecutor.execute {
             try {
+                if (serverUrl.isBlank() || authToken.isBlank()) {
+                    Log.w(TAG, "Server URL or auth token not configured, skipping post")
+                    return@execute
+                }
                 val url = URL(serverUrl)
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Authorization", "Bearer $authToken")
                 connection.doOutput = true
                 connection.connectTimeout = 10000
                 connection.readTimeout = 10000
@@ -299,10 +311,20 @@ class BleService : Service() {
 
                 val responseCode = connection.responseCode
                 Log.d(TAG, "Server response: $responseCode for $coil:$event")
+                if (responseCode !in 200..299) {
+                    showToast("Server error: $responseCode")
+                }
                 connection.disconnect()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to post to server: ${e.message}")
+                showToast("${e.message}")
             }
+        }
+    }
+
+    private fun showToast(message: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(this@BleService, message, Toast.LENGTH_SHORT).show()
         }
     }
 

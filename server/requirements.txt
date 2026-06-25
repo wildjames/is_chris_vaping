@@ -1,0 +1,4 @@
+flask==3.1.*
+gunicorn==23.*
+qrcode==8.*
+Pillow==12.1.*

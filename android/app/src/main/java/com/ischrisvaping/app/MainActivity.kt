@@ -7,7 +7,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -64,6 +68,14 @@ class MainActivity : AppCompatActivity() {
         statusText = findViewById(R.id.statusText)
         dataText = findViewById(R.id.dataText)
 
+        findViewById<Button>(R.id.settingsButton).setOnClickListener {
+            showSettingsDialog()
+        }
+
+        findViewById<Button>(R.id.scanQrButton).setOnClickListener {
+            startActivity(Intent(this, QrScanActivity::class.java))
+        }
+
         if (!checkPermissions()) {
             requestPermissions()
         } else {
@@ -115,6 +127,39 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, BleService::class.java)
         startForegroundService(intent)
         bindService(intent, serviceConnection, BIND_AUTO_CREATE)
+    }
+
+    private fun showSettingsDialog() {
+        val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 0)
+        }
+
+        val urlInput = EditText(this).apply {
+            hint = "Server URL (e.g. https://example.com/vape-update)"
+            setText(prefs.getString("server_url", ""))
+        }
+        layout.addView(urlInput)
+
+        val tokenInput = EditText(this).apply {
+            hint = "Auth Token"
+            setText(prefs.getString("auth_token", ""))
+        }
+        layout.addView(tokenInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("Server Settings")
+            .setView(layout)
+            .setPositiveButton("Save") { _, _ ->
+                prefs.edit()
+                    .putString("server_url", urlInput.text.toString().trim())
+                    .putString("auth_token", tokenInput.text.toString().trim())
+                    .apply()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onStart() {
