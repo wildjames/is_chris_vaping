@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from functools import wraps
 
 import qrcode
+import redis
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
@@ -15,22 +16,26 @@ if not AUTH_TOKEN:
     raise RuntimeError("VAPE_API_TOKEN environment variable must be set")
 SERVER_URL = os.environ.get("VAPE_SERVER_URL", "http://localhost:5000/")
 
-payload = json.dumps({"server_url": SERVER_URL, "auth_token": AUTH_TOKEN})
-img = qrcode.make(payload)
-qr_code_filename = "/output/vape_config_qr.png"
-os.makedirs(os.path.dirname(qr_code_filename), exist_ok=True)
-img.save(qr_code_filename)
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
-logger = logging.getLogger(__name__)
-logger.info(f"QR code saved to {qr_code_filename}")
+VAPE_STATE_KEY = "vape_state"
 
-# In-memory state
-vape_state = {
-    "coil_a": False,
-    "coil_b": False,
-    "last_event": None,
-    "last_updated": None,
-}
+
+def get_vape_state():
+    raw = redis_client.get(VAPE_STATE_KEY)
+    if raw:
+        return json.loads(raw)
+    return {
+        "coil_a": False,
+        "coil_b": False,
+        "last_event": None,
+        "last_updated": None,
+    }
+
+
+def set_vape_state(state):
+    redis_client.set(VAPE_STATE_KEY, json.dumps(state))
 
 
 def require_token(f):
@@ -58,9 +63,11 @@ def vape_update():
     if event not in ("started", "stopped"):
         return jsonify({"error": "Invalid event, must be started or stopped"}), 400
 
+    vape_state = get_vape_state()
     vape_state[coil] = event == "started"
     vape_state["last_event"] = f"{coil}:{event}"
     vape_state["last_updated"] = datetime.now(timezone.utc).isoformat()
+    set_vape_state(vape_state)
 
     is_vaping = vape_state["coil_a"] or vape_state["coil_b"]
     app.logger.info(
@@ -72,6 +79,7 @@ def vape_update():
 
 @app.route("/vape-status", methods=["GET"])
 def vape_status():
+    vape_state = get_vape_state()
     is_vaping = vape_state["coil_a"] or vape_state["coil_b"]
     return jsonify({"is_vaping": is_vaping, "state": vape_state}), 200
 

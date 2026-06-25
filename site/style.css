@@ -1,0 +1,26 @@
+.box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+}
+
+.status {
+  font-size: 10em;
+  color: #333;
+}
+
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  padding: 10px;
+}
+
+.debug {
+  font-size: 0.8em;
+  color: #666;
+}

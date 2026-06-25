@@ -176,6 +176,15 @@ class BleService : Service() {
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.d(TAG, "Disconnected from GATT server")
                     updateStatus("Disconnected - reconnecting...")
+                    // Report both coils as stopped to the server
+                    if (coilAActive) {
+                        coilAActive = false
+                        postToServer("coil_a", "stopped")
+                    }
+                    if (coilBActive) {
+                        coilBActive = false
+                        postToServer("coil_b", "stopped")
+                    }
                     bluetoothGatt?.close()
                     bluetoothGatt = null
                     startScan()
