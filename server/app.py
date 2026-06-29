@@ -6,9 +6,11 @@ from functools import wraps
 from pathlib import Path
 
 import redis
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, send_from_directory
 
-app = Flask(__name__)
+SITE_DIR = Path(__file__).resolve().parent / "site"
+
+app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="/static")
 logging.basicConfig(level=logging.INFO)
 
 AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
@@ -146,6 +148,16 @@ def firmware_upload():
 
     app.logger.info("Firmware uploaded: version=%s size=%d", version, file_size)
     return jsonify({"status": "ok", "version": version, "size": file_size}), 200
+
+
+@app.route("/", methods=["GET"])
+def serve_index():
+    return send_from_directory(SITE_DIR, "index.html")
+
+
+@app.route("/<path:filename>", methods=["GET"])
+def serve_site(filename):
+    return send_from_directory(SITE_DIR, filename)
 
 
 if __name__ == "__main__":
