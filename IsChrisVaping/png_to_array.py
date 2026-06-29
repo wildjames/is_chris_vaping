@@ -25,23 +25,19 @@ def convert_image(image_path, array_name):
 
     print(f"Original image size: {width}x{height}")
 
-    if width == DISPLAY_HEIGHT and height == DISPLAY_WIDTH:
-        # Rotate 90 degrees
-        print("Rotating image 90 degrees to fit display...")
-        img = img.rotate(-90, expand=True)
-        width, height = img.size
-        pixels = list(img.getdata())
-        print(f"New image size: {width}x{height}")
-
     # Pack pixels into bytes (MSB first), 1 = white, 0 = black
+    # Each row is padded to a byte boundary (required by Adafruit_GFX drawBitmap)
     packed = []
-    for i in range(0, len(pixels), 8):
-        byte = 0
-        for bit in range(8):
-            idx = i + bit
-            if idx < len(pixels) and pixels[idx] >= 128:
-                byte |= (0x80 >> bit)
-        packed.append(byte)
+    bytes_per_row = (width + 7) // 8
+    for row in range(height):
+        row_start = row * width
+        for b in range(bytes_per_row):
+            byte = 0
+            for bit in range(8):
+                px_idx = row_start + b * 8 + bit
+                if b * 8 + bit < width and pixels[px_idx] >= 128:
+                    byte |= (0x80 >> bit)
+            packed.append(byte)
 
     lines = []
     lines.append(f"// Generated from {Path(image_path).name}")

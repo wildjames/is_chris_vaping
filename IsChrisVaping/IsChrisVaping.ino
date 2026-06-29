@@ -10,11 +10,6 @@
 
 #define FIRMWARE_VERSION "1.1.3"
 
-#include "RIPPING_COIL_A.h"
-#include "RIPPING_COIL_B.h"
-#include "QUITTING_RIPPING_COIL_A.h"
-#include "QUITTING_RIPPING_COIL_B.h"
-#include "NOT_RIPPED.h"
 #include "bluetooth_connected.h"
 #include "bluetooth_disconnected.h"
 
@@ -51,6 +46,9 @@ int coilBCount = 0;
 const unsigned long NOT_RIPPED_DELAY_MS = 3000;
 unsigned long notRippedTimerStart = 0;
 bool notRippedTimerActive = false;
+
+// Current display text (for redraw on BT status change)
+const char* currentDisplayText = "NOT\nRIPPED";
 
 // Sleep timing
 const unsigned long LIGHT_SLEEP_TIMEOUT_MS = 60000;       // 60s inactivity -> light sleep
@@ -262,28 +260,62 @@ void sendBLEMessage(const char* msg) {
   }
 }
 
-// Line buffer for converting 1-bit bitmap to RGB565 one row at a time
-static uint16_t lineBuf[170];
-
-void showImage(const uint8_t* bitmap, uint16_t w, uint16_t h) {
-  // Every image is OR'd with the bluetooth status icon
+// Draw the bluetooth icon in the upper-left corner
+void drawBtIcon() {
   const uint8_t* btBitmap = deviceConnected ? bluetooth_connected : bluetooth_disconnected;
+  uint16_t w = bluetooth_connected_width;
+  uint16_t h = bluetooth_connected_height;
 
-  tft.startWrite();
-  tft.setAddrWindow(0, 0, w, h);
+  // Clear the icon area and draw the new icon
+  tft.fillRect(0, 0, w + 2, h + 2, ST77XX_BLACK);
+  tft.drawBitmap(1, 1, btBitmap, w, h, ST77XX_WHITE);
+}
 
-  uint32_t totalPixels = (uint32_t)w * h;
-  for (uint32_t i = 0; i < totalPixels; i += w) {
-    for (uint16_t x = 0; x < w; x++) {
-      uint32_t idx = i + x;
-      uint8_t mainBit = (pgm_read_byte(&bitmap[idx / 8]) >> (7 - (idx & 7))) & 1;
-      uint8_t btBit = (pgm_read_byte(&btBitmap[idx / 8]) >> (7 - (idx & 7))) & 1;
-      lineBuf[x] = (mainBit || btBit) ? 0xFFFF : 0x0000;
+// Draw centered multi-line text on screen with BT icon overlay
+void showText(const char* text) {
+  currentDisplayText = text;
+
+  tft.fillScreen(ST77XX_BLACK);
+
+  // At textSize=7: 42px wide, 56px tall per char - closest to 170/3 approx. 57px
+  const uint8_t textSize = 6;
+  const uint8_t charW = 6 * textSize;  // 42
+  const uint8_t charH = 8 * textSize;  // 56
+  const uint8_t lineSpacing = 2;
+
+  // Count lines and find max line length
+  uint8_t lineCount = 1;
+  const char* p = text;
+  while (*p) { if (*p == '\n') lineCount++; p++; }
+
+  // Calculate total text block height
+  uint16_t totalH = lineCount * charH + (lineCount - 1) * lineSpacing;
+  int16_t startY = (170 - totalH) / 2;
+
+  tft.setTextSize(textSize);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setTextWrap(false);
+
+  // Draw each line centered
+  const char* lineStart = text;
+  for (uint8_t line = 0; line < lineCount; line++) {
+    // Find end of this line
+    const char* lineEnd = lineStart;
+    while (*lineEnd && *lineEnd != '\n') lineEnd++;
+    uint8_t lineLen = lineEnd - lineStart;
+
+    int16_t x = (320 - lineLen * charW) / 2;
+    int16_t y = startY + line * (charH + lineSpacing);
+
+    tft.setCursor(x, y);
+    for (uint8_t i = 0; i < lineLen; i++) {
+      tft.write(lineStart[i]);
     }
-    tft.writePixels(lineBuf, w);
+
+    lineStart = (*lineEnd == '\n') ? lineEnd + 1 : lineEnd;
   }
 
-  tft.endWrite();
+  drawBtIcon();
 }
 
 void handleCoilAStarted() {
@@ -291,14 +323,14 @@ void handleCoilAStarted() {
   coilAActive = true;
   lastActivityTime = millis();
   sendBLEMessage(MSG_COIL_A_STARTED);
-  showImage(RIPPING_COIL_A, RIPPING_COIL_A_width, RIPPING_COIL_A_height);
+  showText("RIPPIN'\nCOIL A");
 }
 
 void handleCoilAStopped() {
   coilAActive = false;
   lastActivityTime = millis();
   sendBLEMessage(MSG_COIL_A_STOPPED);
-  showImage(QUITTING_RIPPING_COIL_A, QUITTING_RIPPING_COIL_A_width, QUITTING_RIPPING_COIL_A_height);
+  showText("QUIT\nRIPPIN' A");
   notRippedTimerStart = millis();
   notRippedTimerActive = true;
 }
@@ -308,14 +340,14 @@ void handleCoilBStarted() {
   notRippedTimerActive = false;
   lastActivityTime = millis();
   sendBLEMessage(MSG_COIL_B_STARTED);
-  showImage(RIPPING_COIL_B, RIPPING_COIL_B_width, RIPPING_COIL_B_height);
+  showText("RIPPIN'\nCOIL B");
 }
 
 void handleCoilBStopped() {
   coilBActive = false;
   lastActivityTime = millis();
   sendBLEMessage(MSG_COIL_B_STOPPED);
-  showImage(QUITTING_RIPPING_COIL_B, QUITTING_RIPPING_COIL_B_width, QUITTING_RIPPING_COIL_B_height);
+  showText("QUIT\nRIPPIN' B");
   notRippedTimerStart = millis();
   notRippedTimerActive = true;
 }
@@ -340,10 +372,10 @@ void setup() {
   analogWrite(LCD_BLK, LCD_BRIGHTNESS);
   tft.init(170, 320);
   tft.writeCommand(ST77XX_DISPON);
-  tft.setRotation(0);
-  tft.setSPISpeed(80000000);  // 80MHz SPI for fast screen updates
+  tft.setRotation(1);
+  tft.setSPISpeed(80000000);  // 80MHz SPI
   tft.fillScreen(ST77XX_BLACK);
-  showImage(NOT_RIPPED, NOT_RIPPED_width, NOT_RIPPED_height);
+  showText("NOT\nRIPPED");
 
   // Configure ADC for coil sensing pins
   analogSetAttenuation(ADC_11db);
@@ -486,16 +518,14 @@ void loop() {
   // --- NOT_RIPPED timer ---
   if (notRippedTimerActive && (millis() - notRippedTimerStart >= NOT_RIPPED_DELAY_MS)) {
     notRippedTimerActive = false;
-    showImage(NOT_RIPPED, NOT_RIPPED_width, NOT_RIPPED_height);
+    showText("NOT\nRIPPED");
   }
 
   // --- Bluetooth connection status change ---
   if (deviceConnected != previousConnected) {
     previousConnected = deviceConnected;
-    // Redraw current screen to update bluetooth icon
-    if (!coilAActive && !coilBActive && !notRippedTimerActive) {
-      showImage(NOT_RIPPED, NOT_RIPPED_width, NOT_RIPPED_height);
-    }
+    // Just redraw the BT icon without clearing the screen
+    drawBtIcon();
   }
 
   // --- Sleep after inactivity ---
