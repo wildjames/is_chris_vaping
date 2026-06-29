@@ -1,8 +1,6 @@
 #include "bluetooth.h"
 #include "ota.h"
 
-#define FIRMWARE_VERSION "1.1.3"
-
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
@@ -51,8 +49,9 @@ void bluetoothInit() {
   BLEDevice::init("IsChrisVaping");
 
   // Create BLE Server
+  static MyServerCallbacks serverCallbacks;
   pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+  pServer->setCallbacks(&serverCallbacks);
 
   // Create BLE Service
   BLEService* pService = pServer->createService(SERVICE_UUID);
@@ -82,6 +81,4 @@ void bluetoothInit() {
   BLEDevice::startAdvertising();
 
   Serial.println("BLE ready. Waiting for connection...");
-  Serial.print("Running firmware version ");
-  Serial.println(FIRMWARE_VERSION);
 }

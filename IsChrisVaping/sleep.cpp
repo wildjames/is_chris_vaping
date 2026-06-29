@@ -7,51 +7,47 @@
 // Shared state
 extern unsigned long lastActivityTime;
 
-// Sleep state (RTC-persisted across light sleep)
-RTC_DATA_ATTR static unsigned long lightSleepStartTime = 0;
-RTC_DATA_ATTR static bool inLightSleepPhase = false;
+static bool stayAsleep = false;
 
 void sleepCheckWakeup() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT1) {
     Serial.println("Woke from sleep (coil activity detected)");
-    inLightSleepPhase = false;
-    lightSleepStartTime = 0;
+    stayAsleep = false;
   }
 }
 
 void sleepUpdate() {
   if (otaInProgress || coilAActive || coilBActive) return;
-  if (millis() - lastActivityTime <= LIGHT_SLEEP_TIMEOUT_MS) return;
+  if (!stayAsleep && (millis() - lastActivityTime <= LIGHT_SLEEP_TIMEOUT_MS)) return;
 
   // Configure ext1 wakeup on GPIO 12 or GPIO 14 going HIGH
   uint64_t wakeupPinMask = (1ULL << COIL_A_PIN) | (1ULL << COIL_B_PIN);
   esp_sleep_enable_ext1_wakeup(wakeupPinMask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
+  // Also wake on timer so we can transition to deep sleep
+  esp_sleep_enable_timer_wakeup((uint64_t)DEEP_SLEEP_TIMEOUT_MS * 1000ULL);
+
   // Turn off display before sleeping
   analogWrite(LCD_BLK, 0);
   tft.writeCommand(ST77XX_DISPOFF);
 
-  // Track how long we've been in the light sleep phase
-  if (!inLightSleepPhase) {
-    inLightSleepPhase = true;
-    lightSleepStartTime = millis();
-  }
+  // Enter light sleep
+  Serial.println("Entering light sleep...");
+  Serial.flush();
+  esp_light_sleep_start();
 
-  unsigned long lightSleepElapsed = millis() - lightSleepStartTime;
+  // Execution resumes here after wakeup
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
-  if (lightSleepElapsed >= DEEP_SLEEP_TIMEOUT_MS) {
-    // Been in light sleep phase for 1 hour - switch to deep sleep
-    Serial.println("Entering deep sleep (1hr light sleep elapsed)...");
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
+    // Timer expired - transition to deep sleep
+    Serial.println("Light sleep timer expired, entering deep sleep...");
     Serial.flush();
     esp_deep_sleep_start();
-  } else {
-    // Light sleep - wake on ext1
-    Serial.println("Entering light sleep...");
-    Serial.flush();
-    esp_light_sleep_start();
-    // Execution resumes here after light sleep wakeup
-    Serial.println("Light sleep wakeup");
-    lastActivityTime = millis() - LIGHT_SLEEP_TIMEOUT_MS;  // Stay in sleep cycle unless coil triggers
   }
+
+  // Woke from EXT1 (coil activity)
+  Serial.println("Light sleep wakeup (coil activity)");
+  stayAsleep = true;  // Keep re-entering sleep unless coil handler resets this
 }

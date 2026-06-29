@@ -1,6 +1,7 @@
 #ifndef BLUETOOTH_H
 #define BLUETOOTH_H
 
+#include "version.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>

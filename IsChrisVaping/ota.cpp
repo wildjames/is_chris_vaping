@@ -1,4 +1,5 @@
 #include "ota.h"
+#include "bluetooth.h"
 #include <Update.h>
 #include <BLE2902.h>
 
@@ -15,8 +16,6 @@ extern unsigned long lastActivityTime;
 #define OTA_RSP_OK      0x11
 #define OTA_RSP_ERROR   0x12
 #define OTA_RSP_ACK     0x13
-
-#define FIRMWARE_VERSION "1.1.3"
 
 bool otaInProgress = false;
 static uint32_t otaExpectedSize = 0;
@@ -162,20 +161,22 @@ void otaInit(BLEServer* pServer) {
   BLEService* pOtaService = pServer->createService(OTA_SERVICE_UUID);
 
   // OTA Control Characteristic (write + notify)
+  static OtaControlCallbacks controlCallbacks;
   pOtaControl = pOtaService->createCharacteristic(
     OTA_CONTROL_UUID,
     BLECharacteristic::PROPERTY_WRITE |
     BLECharacteristic::PROPERTY_NOTIFY
   );
-  pOtaControl->setCallbacks(new OtaControlCallbacks());
+  pOtaControl->setCallbacks(&controlCallbacks);
   pOtaControl->addDescriptor(new BLE2902());
 
   // OTA Data Characteristic (write without response for speed, with response as fallback)
+  static OtaDataCallbacks dataCallbacks;
   pOtaData = pOtaService->createCharacteristic(
     OTA_DATA_UUID,
     BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
   );
-  pOtaData->setCallbacks(new OtaDataCallbacks());
+  pOtaData->setCallbacks(&dataCallbacks);
 
   // OTA Version Characteristic (read-only)
   pOtaVersion = pOtaService->createCharacteristic(

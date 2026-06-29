@@ -14,10 +14,10 @@
 #define LCD_BRIGHTNESS 25
 
 // At textSize=7: 42px wide, 56px tall per char
-const uint8_t textSize = 6;
-const uint8_t charW = 6 * textSize;
-const uint8_t charH = 8 * textSize;
-const uint8_t lineSpacing = 2;
+static constexpr uint8_t textSize = 6;
+static constexpr uint8_t charW = 6 * textSize;
+static constexpr uint8_t charH = 8 * textSize;
+static constexpr uint8_t lineSpacing = 2;
 
 extern Adafruit_ST7789 tft;
 extern const char* currentDisplayText;

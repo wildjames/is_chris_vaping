@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include "version.h"
 #include "display.h"
 #include "bluetooth.h"
 #include "ota.h"
@@ -29,6 +30,7 @@ void setup() {
 
   bluetoothInit();
 
+  Serial.printf("Firmware version: %s\n", FIRMWARE_VERSION);
   Serial.println("Serial commands: 1=CoilA start, 2=CoilA stop, 3=CoilB start, 4=CoilB stop");
   Serial.println("60s inactivity -> light sleep (1hr), then deep sleep.");
   Serial.println();
