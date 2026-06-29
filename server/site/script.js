@@ -1,5 +1,5 @@
 setInterval(() => {
-  fetch("http://localhost:5000/vape-status")
+  fetch("/vape-status")
     .then(response => response.json())
     .then(data => {
       let isVaping = data.is_vaping;
