@@ -54,6 +54,7 @@ class BleService : Service() {
         fun onCharacteristicWrite(characteristic: BluetoothGattCharacteristic, status: Int)
         fun onDescriptorWrite(descriptor: BluetoothGattDescriptor, status: Int)
         fun onMtuChanged(mtu: Int)
+        fun onReadRemoteRssi(rssi: Int) {}
     }
     var gattEventListener: GattEventListener? = null
 
@@ -265,6 +266,12 @@ class BleService : Service() {
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             gattEventListener?.onDescriptorWrite(descriptor, status)
+        }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                gattEventListener?.onReadRemoteRssi(rssi)
+            }
         }
     }
 

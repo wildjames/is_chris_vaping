@@ -50,6 +50,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var versionText: TextView
     private lateinit var serverVersionText: TextView
+    private lateinit var rssiText: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var progressText: TextView
     private lateinit var startUpdateButton: Button
@@ -72,6 +73,14 @@ class OtaUpdateActivity : AppCompatActivity() {
     private val writeSemaphore = Semaphore(0)
     private var lastWriteStatus: Int = BluetoothGatt.GATT_SUCCESS
     private val executor = Executors.newSingleThreadExecutor()
+
+    private val rssiRunnable = object : Runnable {
+        @SuppressLint("MissingPermission")
+        override fun run() {
+            bluetoothGatt?.readRemoteRssi()
+            mainHandler.postDelayed(this, 2000)
+        }
+    }
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -127,6 +136,10 @@ class OtaUpdateActivity : AppCompatActivity() {
             // MTU negotiation done - now safe to do the descriptor write
             mainHandler.post { discoverOtaService() }
         }
+
+        override fun onReadRemoteRssi(rssi: Int) {
+            mainHandler.post { updateRssiDisplay(rssi) }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -136,6 +149,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         statusText = findViewById(R.id.otaStatusText)
         versionText = findViewById(R.id.otaVersionText)
         serverVersionText = findViewById(R.id.otaServerVersionText)
+        rssiText = findViewById(R.id.otaRssiText)
         progressBar = findViewById(R.id.otaProgressBar)
         progressText = findViewById(R.id.otaProgressText)
         startUpdateButton = findViewById(R.id.startUpdateButton)
@@ -162,6 +176,9 @@ class OtaUpdateActivity : AppCompatActivity() {
         }
 
         bluetoothGatt = gatt
+
+        // Request high priority connection interval (7.5-15ms) for faster transfers
+        gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
 
         // Request higher MTU for faster transfers
         // The rest of setup happens in onMtuChanged callback
@@ -198,6 +215,9 @@ class OtaUpdateActivity : AppCompatActivity() {
 
         updateStatus("Connected to device")
         checkUpdateAvailable()
+
+        // Start periodic RSSI reading
+        mainHandler.post(rssiRunnable)
     }
 
     private fun getServerBaseUrl(): String {
@@ -411,7 +431,7 @@ class OtaUpdateActivity : AppCompatActivity() {
             for (attempt in 1..maxRetries) {
                 writeSemaphore.drainPermits()
                 lastWriteStatus = BluetoothGatt.GATT_SUCCESS
-                gatt.writeCharacteristic(dataChar, chunk, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                gatt.writeCharacteristic(dataChar, chunk, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
 
                 // Wait for write completion callback before sending next chunk
                 if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
@@ -451,27 +471,67 @@ class OtaUpdateActivity : AppCompatActivity() {
         // Drain any stale ACK notifications before sending END
         while (responseQueue.poll() != null) { /* discard */ }
 
-        // Send END command
-        writeSemaphore.drainPermits()
-        gatt.writeCharacteristic(controlChar, byteArrayOf(OTA_CMD_END), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-        if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
-            throw Exception("BLE write timed out sending END command")
-        }
+        // Send END command - device will reboot on success, which may disconnect BLE
+        // before we get a response, so treat connection failures here as likely success
+        try {
+            writeSemaphore.drainPermits()
+            gatt.writeCharacteristic(controlChar, byteArrayOf(OTA_CMD_END), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+            if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+                Log.w(TAG, "END command write timed out - device likely rebooted")
+                mainHandler.post {
+                    updateStatus("Update likely successful - device is rebooting...")
+                    progressBar.progress = 100
+                    progressText.text = "Complete!"
+                }
+                isUpdating = false
+                return
+            }
 
-        // Wait for OK response (device will reboot after this)
-        val endResponse = responseQueue.poll(10, TimeUnit.SECONDS)
-        if (endResponse != null && endResponse[0] == OTA_RSP_OK) {
+            // Wait for OK response (device will reboot after this)
+            val endResponse = responseQueue.poll(10, TimeUnit.SECONDS)
+            if (endResponse != null && endResponse[0] == OTA_RSP_OK) {
+                mainHandler.post {
+                    updateStatus("Update successful! Device is rebooting...")
+                    progressBar.progress = 100
+                    progressText.text = "Complete!"
+                }
+            } else if (endResponse != null && endResponse[0] == OTA_RSP_ERROR) {
+                throw Exception("Verification failed on device (code: ${endResponse.getOrNull(1) ?: "unknown"})")
+            } else {
+                // No response - device likely already rebooted (success)
+                Log.w(TAG, "No END response - device likely rebooted")
+                mainHandler.post {
+                    updateStatus("Update likely successful - device is rebooting...")
+                    progressBar.progress = 100
+                    progressText.text = "Complete!"
+                }
+            }
+        } catch (e: Exception) {
+            // If the exception is from the END phase and not an explicit device error,
+            // the device most likely rebooted after a successful update
+            if (e.message?.contains("Verification failed") == true) {
+                throw e
+            }
+            Log.w(TAG, "END phase failed (device likely rebooted): ${e.message}")
             mainHandler.post {
-                updateStatus("Update successful! Device is rebooting...")
+                updateStatus("Update likely successful - device is rebooting...")
                 progressBar.progress = 100
                 progressText.text = "Complete!"
             }
-        } else if (endResponse != null && endResponse[0] == OTA_RSP_ERROR) {
-            throw Exception("Verification failed on device (code: ${endResponse.getOrNull(1) ?: "unknown"})")
         }
-        // If no response, device likely already rebooted (success)
 
         isUpdating = false
+    }
+
+    private fun updateRssiDisplay(rssi: Int) {
+        val label = when {
+            rssi >= -50 -> "Excellent"
+            rssi >= -60 -> "Good"
+            rssi >= -70 -> "Fair"
+            rssi >= -80 -> "Weak"
+            else -> "Very weak"
+        }
+        rssiText.text = "Signal: $rssi dBm ($label)"
     }
 
     private fun updateStatus(message: String) {
@@ -482,6 +542,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     @SuppressLint("MissingPermission")
     override fun onDestroy() {
         super.onDestroy()
+        mainHandler.removeCallbacks(rssiRunnable)
         if (isUpdating) {
             val controlChar = otaControlChar
             if (controlChar != null && bluetoothGatt != null) {

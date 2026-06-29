@@ -8,7 +8,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 
-#define FIRMWARE_VERSION "1.1.0"
+#define FIRMWARE_VERSION "1.1.3"
 
 #include "RIPPING_COIL_A.h"
 #include "RIPPING_COIL_B.h"
@@ -129,6 +129,8 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks {
     uint8_t cmd = data[0];
     uint8_t response[2];
 
+    lastActivityTime = millis();
+
     switch (cmd) {
       case OTA_CMD_BEGIN: {
         if (len < 5) {
@@ -241,7 +243,10 @@ class OtaDataCallbacks : public BLECharacteristicCallbacks {
     }
 
     otaReceivedSize += len;
-    Serial.printf("OTA received: %u / %u bytes\n", otaReceivedSize, otaExpectedSize);
+    // Only write progress every 50 chunks
+    if (otaReceivedSize % (50 * len) < len) {
+      Serial.printf("OTA received: %u / %u bytes\n", otaReceivedSize, otaExpectedSize);
+    }
   }
 };
 
@@ -384,10 +389,10 @@ void setup() {
   pOtaControl->setCallbacks(new OtaControlCallbacks());
   pOtaControl->addDescriptor(new BLE2902());
 
-  // OTA Data Characteristic (write with response for flow control)
+  // OTA Data Characteristic (write without response for speed, with response as fallback)
   pOtaData = pOtaService->createCharacteristic(
     OTA_DATA_UUID,
-    BLECharacteristic::PROPERTY_WRITE
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
   );
   pOtaData->setCallbacks(new OtaDataCallbacks());
 
