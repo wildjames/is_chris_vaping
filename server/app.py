@@ -95,10 +95,13 @@ def vape_update():
 
 @app.route("/vape-status", methods=["GET"])
 def vape_status():
-    vape_state = get_vape_state()
-    is_vaping = vape_state["coil_a"] or vape_state["coil_b"]
-    return jsonify({"is_vaping": is_vaping, "state": vape_state}), 200
-
+    try:
+        vape_state = get_vape_state()
+        is_vaping = vape_state["coil_a"] or vape_state["coil_b"]
+        return jsonify({"is_vaping": is_vaping, "state": vape_state}), 200
+    except Exception as e:
+        app.logger.exception("Error retrieving vape status: %s", e)
+        return {"is_vaping": False, "state": get_vape_state()}, 200
 
 @app.route("/health", methods=["GET"])
 def health():
