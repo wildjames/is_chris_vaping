@@ -72,6 +72,9 @@ class BleService : Service() {
     var coilBActive: Boolean = false
         private set
 
+    private var lastPostedMessage: String = ""
+    private var lastPostedTime: Long = 0
+
     private val binder = LocalBinder()
 
     inner class LocalBinder : Binder() {
@@ -234,7 +237,6 @@ class BleService : Service() {
                 gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             }
 
-            gatt.readCharacteristic(characteristic)
             updateStatus("Connected - listening for data")
         }
 
@@ -296,6 +298,14 @@ class BleService : Service() {
     }
 
     private fun parseCoilMessage(message: String) {
+        val now = System.currentTimeMillis()
+        if (message == lastPostedMessage && (now - lastPostedTime) < 2000) {
+            Log.d(TAG, "Ignoring duplicate message: $message")
+            return
+        }
+        lastPostedMessage = message
+        lastPostedTime = now
+
         when (message) {
             "COIL_A:STARTED" -> {
                 coilAActive = true
