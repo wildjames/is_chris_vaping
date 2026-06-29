@@ -173,7 +173,19 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks {
           return;
         }
 
-        if (Update.end(true)) {
+        Serial.printf("OTA end: received %u / %u bytes\n", otaReceivedSize, otaExpectedSize);
+        if (otaReceivedSize != otaExpectedSize) {
+          Serial.printf("OTA size mismatch! Aborting.\n");
+          Update.abort();
+          otaInProgress = false;
+          response[0] = OTA_RSP_ERROR;
+          response[1] = 0x06; // size mismatch
+          pCharacteristic->setValue(response, 2);
+          pCharacteristic->notify();
+          return;
+        }
+
+        if (Update.end(false)) {
           Serial.println("OTA success! Rebooting...");
           response[0] = OTA_RSP_OK;
           pCharacteristic->setValue(response, 1);
@@ -229,13 +241,7 @@ class OtaDataCallbacks : public BLECharacteristicCallbacks {
     }
 
     otaReceivedSize += len;
-
-    // Send ACK every 4KB
-    if (otaReceivedSize % 4096 < len) {
-      uint8_t response[1] = { OTA_RSP_ACK };
-      pOtaControl->setValue(response, 1);
-      pOtaControl->notify();
-    }
+    Serial.printf("OTA received: %u / %u bytes\n", otaReceivedSize, otaExpectedSize);
   }
 };
 

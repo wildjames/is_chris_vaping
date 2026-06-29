@@ -70,6 +70,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val responseQueue = LinkedBlockingQueue<ByteArray>()
     private val writeSemaphore = Semaphore(0)
+    private var lastWriteStatus: Int = BluetoothGatt.GATT_SUCCESS
     private val executor = Executors.newSingleThreadExecutor()
 
     private val serviceConnection = object : ServiceConnection {
@@ -107,6 +108,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         }
 
         override fun onCharacteristicWrite(characteristic: BluetoothGattCharacteristic, status: Int) {
+            lastWriteStatus = status
             writeSemaphore.release()
         }
 
@@ -320,12 +322,39 @@ class OtaUpdateActivity : AppCompatActivity() {
         isUpdating = true
 
         Thread {
-            try {
-                transferFirmware(gatt, controlChar, dataChar, data)
-            } catch (e: Exception) {
-                Log.e(TAG, "OTA update failed", e)
+            val maxAttempts = 3
+            var lastError: Exception? = null
+
+            for (attempt in 1..maxAttempts) {
+                try {
+                    if (attempt > 1) {
+                        Log.w(TAG, "Retrying OTA transfer (attempt $attempt/$maxAttempts)")
+                        mainHandler.post {
+                            updateStatus("Retry $attempt/$maxAttempts...")
+                            progressBar.progress = 0
+                        }
+                        // Brief delay before retry to let ESP32 settle
+                        Thread.sleep(2000)
+                    }
+                    transferFirmware(gatt, controlChar, dataChar, data)
+                    lastError = null
+                    break
+                } catch (e: Exception) {
+                    Log.e(TAG, "OTA attempt $attempt failed", e)
+                    lastError = e
+                    // Send ABORT so ESP32 resets OTA state for retry
+                    try {
+                        writeSemaphore.drainPermits()
+                        gatt.writeCharacteristic(controlChar, byteArrayOf(OTA_CMD_ABORT), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                        writeSemaphore.tryAcquire(3, TimeUnit.SECONDS)
+                    } catch (_: Exception) { }
+                    responseQueue.clear()
+                }
+            }
+
+            if (lastError != null) {
                 mainHandler.post {
-                    updateStatus("Update failed: ${e.message}")
+                    updateStatus("Update failed after $maxAttempts attempts: ${lastError.message}")
                     isUpdating = false
                     startUpdateButton.isEnabled = true
                 }
@@ -372,16 +401,32 @@ class OtaUpdateActivity : AppCompatActivity() {
         var offset = 0
         var chunksSent = 0
 
+        val maxRetries = 10
+
         while (offset < size) {
             val end = minOf(offset + chunkSize, size)
             val chunk = firmware.copyOfRange(offset, end)
 
-            writeSemaphore.drainPermits()
-            gatt.writeCharacteristic(dataChar, chunk, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+            var written = false
+            for (attempt in 1..maxRetries) {
+                writeSemaphore.drainPermits()
+                lastWriteStatus = BluetoothGatt.GATT_SUCCESS
+                gatt.writeCharacteristic(dataChar, chunk, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
 
-            // Wait for write completion callback before sending next chunk
-            if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
-                throw Exception("BLE write timed out at offset $offset")
+                // Wait for write completion callback before sending next chunk
+                if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+                    throw Exception("BLE write timed out at offset $offset")
+                }
+
+                if (lastWriteStatus == BluetoothGatt.GATT_SUCCESS) {
+                    written = true
+                    break
+                }
+                Log.w(TAG, "BLE write failed (status=$lastWriteStatus) at offset $offset, attempt $attempt/$maxRetries")
+            }
+
+            if (!written) {
+                throw Exception("BLE write failed after $maxRetries retries at offset $offset (status=$lastWriteStatus)")
             }
 
             offset = end
@@ -403,8 +448,15 @@ class OtaUpdateActivity : AppCompatActivity() {
 
         mainHandler.post { updateStatus("Transfer complete, verifying...") }
 
+        // Drain any stale ACK notifications before sending END
+        while (responseQueue.poll() != null) { /* discard */ }
+
         // Send END command
+        writeSemaphore.drainPermits()
         gatt.writeCharacteristic(controlChar, byteArrayOf(OTA_CMD_END), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+        if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+            throw Exception("BLE write timed out sending END command")
+        }
 
         // Wait for OK response (device will reboot after this)
         val endResponse = responseQueue.poll(10, TimeUnit.SECONDS)
