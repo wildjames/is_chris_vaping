@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
@@ -78,6 +79,13 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.otaButton).setOnClickListener {
             startActivity(Intent(this, OtaUpdateActivity::class.java))
+        }
+
+        val bluetoothToggle = findViewById<SwitchCompat>(R.id.bluetoothToggle)
+        val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
+        bluetoothToggle.isChecked = prefs.getBoolean("bluetooth_enabled", true)
+        bluetoothToggle.setOnCheckedChangeListener { _, isChecked ->
+            bleService?.setBluetoothEnabled(isChecked)
         }
 
         if (!checkPermissions()) {

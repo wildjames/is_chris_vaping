@@ -44,6 +44,8 @@ class BleService : Service() {
     private var bluetoothLeScanner: BluetoothLeScanner? = null
     private var bluetoothGatt: BluetoothGatt? = null
     private var isScanning = false
+    var isBluetoothEnabled = true
+        private set
 
     val gatt: BluetoothGatt? get() = bluetoothGatt
 
@@ -98,8 +100,31 @@ class BleService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification("Searching for device..."))
-        startScan()
+        val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
+        isBluetoothEnabled = prefs.getBoolean("bluetooth_enabled", true)
+        if (isBluetoothEnabled) {
+            startScan()
+        } else {
+            updateStatus("Bluetooth disabled")
+        }
         return START_STICKY
+    }
+
+    @SuppressLint("MissingPermission")
+    fun setBluetoothEnabled(enabled: Boolean) {
+        isBluetoothEnabled = enabled
+        val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
+        prefs.edit().putBoolean("bluetooth_enabled", enabled).apply()
+
+        if (enabled) {
+            startScan()
+        } else {
+            stopScan()
+            bluetoothGatt?.disconnect()
+            bluetoothGatt?.close()
+            bluetoothGatt = null
+            updateStatus("Bluetooth disabled")
+        }
     }
 
     private fun createNotificationChannel() {
@@ -137,6 +162,7 @@ class BleService : Service() {
 
     @SuppressLint("MissingPermission")
     fun startScan() {
+        if (!isBluetoothEnabled) return
         if (isScanning) return
 
         val filter = ScanFilter.Builder()
@@ -191,7 +217,6 @@ class BleService : Service() {
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.d(TAG, "Disconnected from GATT server")
-                    updateStatus("Disconnected - reconnecting...")
                     // Report both coils as stopped to the server
                     if (coilAActive) {
                         coilAActive = false
@@ -203,7 +228,12 @@ class BleService : Service() {
                     }
                     bluetoothGatt?.close()
                     bluetoothGatt = null
-                    startScan()
+                    if (isBluetoothEnabled) {
+                        updateStatus("Disconnected - reconnecting...")
+                        startScan()
+                    } else {
+                        updateStatus("Bluetooth disabled")
+                    }
                 }
             }
         }
