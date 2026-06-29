@@ -9,6 +9,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -36,6 +37,7 @@ class BleService : Service() {
 
         const val ACTION_DATA_UPDATED = "com.ischrisvaping.app.DATA_UPDATED"
         const val ACTION_STATUS_UPDATED = "com.ischrisvaping.app.STATUS_UPDATED"
+        const val ACTION_NOTIFICATION_DISMISSED = "com.ischrisvaping.app.NOTIFICATION_DISMISSED"
         const val EXTRA_DATA = "data"
         const val EXTRA_STATUS = "status"
     }
@@ -99,7 +101,16 @@ class BleService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification("Searching for device..."))
+        if (intent?.action == ACTION_NOTIFICATION_DISMISSED) {
+            // Re-post the notification when user dismisses it (only if BT is active)
+            if (isBluetoothEnabled) {
+                val notificationManager = getSystemService(NotificationManager::class.java)
+                notificationManager.notify(NOTIFICATION_ID, buildNotification(currentStatus))
+            }
+            return START_STICKY
+        }
+
+        startForeground(NOTIFICATION_ID, buildNotification("Searching for device..."), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
         isBluetoothEnabled = prefs.getBoolean("bluetooth_enabled", true)
         if (isBluetoothEnabled) {
@@ -124,6 +135,7 @@ class BleService : Service() {
             bluetoothGatt?.close()
             bluetoothGatt = null
             updateStatus("Bluetooth disabled")
+            updateNotification("Bluetooth disabled", ongoing = false)
         }
     }
 
@@ -139,25 +151,37 @@ class BleService : Service() {
         notificationManager.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(content: String): Notification {
+    private fun buildNotification(content: String, ongoing: Boolean = true): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        return Notification.Builder(this, CHANNEL_ID)
+        val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("IsChrisVaping")
             .setContentText(content)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .build()
+            .setOngoing(ongoing)
+
+        if (ongoing) {
+            val deleteIntent = PendingIntent.getService(
+                this, 0,
+                Intent(this, BleService::class.java).apply {
+                    action = ACTION_NOTIFICATION_DISMISSED
+                },
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.setDeleteIntent(deleteIntent)
+        }
+
+        return builder.build()
     }
 
-    private fun updateNotification(content: String) {
+    private fun updateNotification(content: String, ongoing: Boolean = true) {
         val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.notify(NOTIFICATION_ID, buildNotification(content))
+        notificationManager.notify(NOTIFICATION_ID, buildNotification(content, ongoing))
     }
 
     @SuppressLint("MissingPermission")
