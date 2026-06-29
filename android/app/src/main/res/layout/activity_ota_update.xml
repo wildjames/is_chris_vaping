@@ -7,67 +7,83 @@
     android:padding="24dp">
 
     <TextView
-        android:id="@+id/titleText"
+        android:id="@+id/otaTitleText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Is Chris Vaping?"
-        android:textSize="28sp"
+        android:text="Firmware Update"
+        android:textSize="24sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        android:layout_marginTop="48dp" />
+        android:layout_marginTop="32dp" />
 
     <TextView
-        android:id="@+id/dataText"
+        android:id="@+id/otaVersionText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="--"
-        android:textSize="36sp"
-        android:textStyle="bold"
-        android:textColor="@android:color/holo_blue_dark"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text=""
+        android:text="Device firmware: unknown"
         android:textSize="16sp"
         android:textColor="@android:color/darker_gray"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/dataText"
-        android:layout_marginTop="16dp" />
+        app:layout_constraintTop_toBottomOf="@id/otaTitleText"
+        android:layout_marginTop="8dp" />
 
-    <Button
-        android:id="@+id/settingsButton"
+    <TextView
+        android:id="@+id/otaServerVersionText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Server Settings"
+        android:text="Server firmware: checking..."
+        android:textSize="16sp"
+        android:textColor="@android:color/darker_gray"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/otaButton"
-        android:layout_marginBottom="8dp" />
+        app:layout_constraintTop_toBottomOf="@id/otaVersionText"
+        android:layout_marginTop="4dp" />
 
-    <Button
-        android:id="@+id/otaButton"
+    <TextView
+        android:id="@+id/otaStatusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Update Firmware"
+        android:text="Initializing..."
+        android:textSize="16sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/scanQrButton"
-        android:layout_marginBottom="8dp" />
+        app:layout_constraintTop_toBottomOf="@id/otaServerVersionText"
+        android:layout_marginTop="32dp" />
 
-    <Button
-        android:id="@+id/scanQrButton"
+    <ProgressBar
+        android:id="@+id/otaProgressBar"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:max="100"
+        android:progress="0"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/otaStatusText"
+        android:layout_marginTop="24dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp" />
+
+    <TextView
+        android:id="@+id/otaProgressText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Scan QR Code"
+        android:text=""
+        android:textSize="14sp"
+        android:textColor="@android:color/darker_gray"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/otaProgressBar"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/startUpdateButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Download &amp; Install Update"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"

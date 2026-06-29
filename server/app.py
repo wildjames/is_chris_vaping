@@ -3,10 +3,10 @@ import logging
 import os
 from datetime import datetime, timezone
 from functools import wraps
+from pathlib import Path
 
-import qrcode
 import redis
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -14,12 +14,15 @@ logging.basicConfig(level=logging.INFO)
 AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
 if not AUTH_TOKEN:
     raise RuntimeError("VAPE_API_TOKEN environment variable must be set")
-SERVER_URL = os.environ.get("VAPE_SERVER_URL", "http://localhost:5000/")
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 VAPE_STATE_KEY = "vape_state"
+FIRMWARE_DIR = Path(os.environ.get("FIRMWARE_DIR", "/firmware"))
+REDIS_FIRMWARE_VERSION_KEY = "firmware:version"
+REDIS_FIRMWARE_SIZE_KEY = "firmware:size"
+REDIS_FIRMWARE_UPLOADED_AT_KEY = "firmware:uploaded_at"
 
 
 def get_vape_state():
@@ -87,6 +90,62 @@ def vape_status():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"}), 200
+
+
+@app.route("/firmware/latest", methods=["GET"])
+def firmware_latest():
+    """Returns metadata about the latest firmware version."""
+    version = redis_client.get(REDIS_FIRMWARE_VERSION_KEY)
+    if not version:
+        return jsonify({"error": "No firmware available"}), 404
+    size = redis_client.get(REDIS_FIRMWARE_SIZE_KEY)
+    uploaded_at = redis_client.get(REDIS_FIRMWARE_UPLOADED_AT_KEY)
+    return jsonify({
+        "version": version,
+        "size": int(size) if size else 0,
+        "uploaded_at": uploaded_at,
+    }), 200
+
+
+@app.route("/firmware/download", methods=["GET"])
+def firmware_download():
+    """Download the latest firmware binary."""
+    version = redis_client.get(REDIS_FIRMWARE_VERSION_KEY)
+    if not version:
+        return jsonify({"error": "No firmware available"}), 404
+    firmware_path = FIRMWARE_DIR / "firmware.bin"
+    if not firmware_path.is_file():
+        return jsonify({"error": "Firmware file missing"}), 404
+    return send_file(firmware_path, mimetype="application/octet-stream",
+                     download_name=f"firmware-{version}.bin")
+
+
+@app.route("/firmware/upload", methods=["POST"])
+@require_token
+def firmware_upload():
+    """Upload a new firmware binary. Requires version query param."""
+    version = request.args.get("version")
+    if not version:
+        return jsonify({"error": "version query parameter required"}), 400
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file part in request"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
+    FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+    firmware_path = FIRMWARE_DIR / "firmware.bin"
+    file.save(firmware_path)
+
+    file_size = firmware_path.stat().st_size
+    redis_client.set(REDIS_FIRMWARE_VERSION_KEY, version)
+    redis_client.set(REDIS_FIRMWARE_SIZE_KEY, str(file_size))
+    redis_client.set(REDIS_FIRMWARE_UPLOADED_AT_KEY, datetime.now(timezone.utc).isoformat())
+
+    app.logger.info("Firmware uploaded: version=%s size=%d", version, file_size)
+    return jsonify({"status": "ok", "version": version, "size": file_size}), 200
 
 
 if __name__ == "__main__":

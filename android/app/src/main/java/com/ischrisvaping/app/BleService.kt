@@ -45,6 +45,18 @@ class BleService : Service() {
     private var bluetoothGatt: BluetoothGatt? = null
     private var isScanning = false
 
+    val gatt: BluetoothGatt? get() = bluetoothGatt
+
+    // Listener for OTA characteristic notifications/reads
+    interface GattEventListener {
+        fun onCharacteristicChanged(characteristic: BluetoothGattCharacteristic, value: ByteArray)
+        fun onCharacteristicRead(characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int)
+        fun onCharacteristicWrite(characteristic: BluetoothGattCharacteristic, status: Int)
+        fun onDescriptorWrite(descriptor: BluetoothGattDescriptor, status: Int)
+        fun onMtuChanged(mtu: Int)
+    }
+    var gattEventListener: GattEventListener? = null
+
     private val httpExecutor = Executors.newSingleThreadExecutor()
 
     private var serverUrl: String = ""
@@ -192,6 +204,10 @@ class BleService : Service() {
             }
         }
 
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            gattEventListener?.onMtuChanged(mtu)
+        }
+
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
@@ -224,7 +240,8 @@ class BleService : Service() {
         override fun onCharacteristicRead(
             gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int
         ) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
+            gattEventListener?.onCharacteristicRead(characteristic, value, status)
+            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == CHARACTERISTIC_UUID) {
                 val text = value.toString(Charsets.UTF_8)
                 Log.d(TAG, "Read value: $text")
                 updateData(text)
@@ -234,9 +251,20 @@ class BleService : Service() {
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray
         ) {
-            val text = value.toString(Charsets.UTF_8)
-            Log.d(TAG, "Notification: $text")
-            updateData(text)
+            gattEventListener?.onCharacteristicChanged(characteristic, value)
+            if (characteristic.uuid == CHARACTERISTIC_UUID) {
+                val text = value.toString(Charsets.UTF_8)
+                Log.d(TAG, "Notification: $text")
+                updateData(text)
+            }
+        }
+
+        override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            gattEventListener?.onCharacteristicWrite(characteristic, status)
+        }
+
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            gattEventListener?.onDescriptorWrite(descriptor, status)
         }
     }
 
@@ -302,7 +330,7 @@ class BleService : Service() {
                     Log.w(TAG, "Server URL or auth token not configured, skipping post")
                     return@execute
                 }
-                val url = URL(serverUrl)
+                val url = URL("$serverUrl/vape-update")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")

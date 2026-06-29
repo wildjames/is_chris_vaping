@@ -9,7 +9,7 @@ import qrcode
 
 def main():
     parser = argparse.ArgumentParser(description="Generate config QR code for IsChrisVaping app")
-    parser.add_argument("--url", required=True, help="Server URL (e.g. https://example.com/vape-update)")
+    parser.add_argument("--url", required=True, help="Server base URL (e.g. https://example.com)")
     parser.add_argument("--token", required=True, help="Auth token")
     parser.add_argument("--output", default="vape_config_qr.png", help="Output filename (default: vape_config_qr.png)")
     args = parser.parse_args()

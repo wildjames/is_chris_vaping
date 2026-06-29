@@ -76,6 +76,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, QrScanActivity::class.java))
         }
 
+        findViewById<Button>(R.id.otaButton).setOnClickListener {
+            startActivity(Intent(this, OtaUpdateActivity::class.java))
+        }
+
         if (!checkPermissions()) {
             requestPermissions()
         } else {
@@ -138,7 +142,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val urlInput = EditText(this).apply {
-            hint = "Server URL (e.g. https://example.com/vape-update)"
+            hint = "Server URL (e.g. https://example.com)"
             setText(prefs.getString("server_url", ""))
         }
         layout.addView(urlInput)

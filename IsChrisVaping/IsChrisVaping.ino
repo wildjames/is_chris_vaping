@@ -3,9 +3,12 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <Update.h>
 #include <Button.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
+
+#define FIRMWARE_VERSION "1.1.0"
 
 #include "RIPPING_COIL_A.h"
 #include "RIPPING_COIL_B.h"
@@ -60,10 +63,33 @@ RTC_DATA_ATTR bool inLightSleepPhase = false;
 #define SERVICE_UUID        "189a9192-f68f-4ac4-962e-d70e7c3755a0"
 #define CHARACTERISTIC_UUID "5cf4a205-84e1-42ad-ac23-e5adc776a992"
 
+// OTA BLE UUIDs
+#define OTA_SERVICE_UUID        "fb1e4001-54ae-4a28-9f74-dfccb248601d"
+#define OTA_CONTROL_UUID        "fb1e4002-54ae-4a28-9f74-dfccb248601d"
+#define OTA_DATA_UUID           "fb1e4003-54ae-4a28-9f74-dfccb248601d"
+#define OTA_VERSION_UUID        "fb1e4004-54ae-4a28-9f74-dfccb248601d"
+
+// OTA control commands (from phone)
+#define OTA_CMD_BEGIN   0x01
+#define OTA_CMD_END     0x02
+#define OTA_CMD_ABORT   0x03
+
+// OTA control responses (to phone)
+#define OTA_RSP_READY   0x10
+#define OTA_RSP_OK      0x11
+#define OTA_RSP_ERROR   0x12
+#define OTA_RSP_ACK     0x13
+
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
+BLECharacteristic* pOtaControl = NULL;
+BLECharacteristic* pOtaData = NULL;
+BLECharacteristic* pOtaVersion = NULL;
 bool deviceConnected = false;
 bool previousConnected = false;
+bool otaInProgress = false;
+uint32_t otaExpectedSize = 0;
+uint32_t otaReceivedSize = 0;
 
 // BLE message definitions
 const char* MSG_COIL_A_STARTED = "COIL_A:STARTED";
@@ -81,8 +107,135 @@ class MyServerCallbacks : public BLEServerCallbacks {
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
     Serial.println("Device disconnected");
+    // Abort any in-progress OTA on disconnect
+    if (otaInProgress) {
+      Update.abort();
+      otaInProgress = false;
+      otaReceivedSize = 0;
+      Serial.println("OTA aborted due to disconnect");
+    }
     // Restart advertising so phone can reconnect
     pServer->startAdvertising();
+  }
+};
+
+// OTA Control Characteristic callback
+class OtaControlCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) {
+    const uint8_t* data = pCharacteristic->getData();
+    size_t len = pCharacteristic->getLength();
+    if (!data || len < 1) return;
+
+    uint8_t cmd = data[0];
+    uint8_t response[2];
+
+    switch (cmd) {
+      case OTA_CMD_BEGIN: {
+        if (len < 5) {
+          response[0] = OTA_RSP_ERROR;
+          response[1] = 0x01; // invalid length
+          pCharacteristic->setValue(response, 2);
+          pCharacteristic->notify();
+          return;
+        }
+        // Extract 4-byte file size (little-endian)
+        otaExpectedSize = (uint32_t)data[1] |
+                          ((uint32_t)data[2] << 8) |
+                          ((uint32_t)data[3] << 16) |
+                          ((uint32_t)data[4] << 24);
+        otaReceivedSize = 0;
+
+        Serial.printf("OTA begin: expecting %u bytes\n", otaExpectedSize);
+
+        if (!Update.begin(otaExpectedSize)) {
+          Serial.println("OTA Update.begin() failed");
+          response[0] = OTA_RSP_ERROR;
+          response[1] = 0x02; // begin failed
+          pCharacteristic->setValue(response, 2);
+          pCharacteristic->notify();
+          return;
+        }
+
+        otaInProgress = true;
+        response[0] = OTA_RSP_READY;
+        pCharacteristic->setValue(response, 1);
+        pCharacteristic->notify();
+        Serial.println("OTA ready for data");
+        break;
+      }
+
+      case OTA_CMD_END: {
+        if (!otaInProgress) {
+          response[0] = OTA_RSP_ERROR;
+          response[1] = 0x03; // not in progress
+          pCharacteristic->setValue(response, 2);
+          pCharacteristic->notify();
+          return;
+        }
+
+        if (Update.end(true)) {
+          Serial.println("OTA success! Rebooting...");
+          response[0] = OTA_RSP_OK;
+          pCharacteristic->setValue(response, 1);
+          pCharacteristic->notify();
+          delay(500);
+          ESP.restart();
+        } else {
+          Serial.printf("OTA end failed: %s\n", Update.errorString());
+          response[0] = OTA_RSP_ERROR;
+          response[1] = 0x04; // end failed
+          pCharacteristic->setValue(response, 2);
+          pCharacteristic->notify();
+          otaInProgress = false;
+        }
+        break;
+      }
+
+      case OTA_CMD_ABORT: {
+        if (otaInProgress) {
+          Update.abort();
+          otaInProgress = false;
+          otaReceivedSize = 0;
+          Serial.println("OTA aborted by client");
+        }
+        response[0] = OTA_RSP_OK;
+        pCharacteristic->setValue(response, 1);
+        pCharacteristic->notify();
+        break;
+      }
+    }
+  }
+};
+
+// OTA Data Characteristic callback
+class OtaDataCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) {
+    if (!otaInProgress) return;
+
+    const uint8_t* data = pCharacteristic->getData();
+    size_t len = pCharacteristic->getLength();
+    if (!data || len == 0) return;
+
+    size_t written = Update.write(const_cast<uint8_t*>(data), len);
+    if (written != len) {
+      Serial.printf("OTA write error: wrote %d of %d\n", written, len);
+      // Notify error via control characteristic
+      uint8_t response[2] = { OTA_RSP_ERROR, 0x05 };
+      pOtaControl->setValue(response, 2);
+      pOtaControl->notify();
+      Update.abort();
+      otaInProgress = false;
+      return;
+    }
+
+    otaReceivedSize += len;
+
+    // Send ACK every 4KB
+    if (otaReceivedSize % 4096 < len) {
+      uint8_t response[1] = { OTA_RSP_ACK };
+      pOtaControl->setValue(response, 1);
+      pOtaControl->notify();
+    }
   }
 };
 
@@ -213,15 +366,46 @@ void setup() {
   // Start the service
   pService->start();
 
+  // Create OTA BLE Service
+  BLEService* pOtaService = pServer->createService(OTA_SERVICE_UUID);
+
+  // OTA Control Characteristic (write + notify)
+  pOtaControl = pOtaService->createCharacteristic(
+    OTA_CONTROL_UUID,
+    BLECharacteristic::PROPERTY_WRITE |
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pOtaControl->setCallbacks(new OtaControlCallbacks());
+  pOtaControl->addDescriptor(new BLE2902());
+
+  // OTA Data Characteristic (write with response for flow control)
+  pOtaData = pOtaService->createCharacteristic(
+    OTA_DATA_UUID,
+    BLECharacteristic::PROPERTY_WRITE
+  );
+  pOtaData->setCallbacks(new OtaDataCallbacks());
+
+  // OTA Version Characteristic (read-only)
+  pOtaVersion = pOtaService->createCharacteristic(
+    OTA_VERSION_UUID,
+    BLECharacteristic::PROPERTY_READ
+  );
+  pOtaVersion->setValue(FIRMWARE_VERSION);
+
+  pOtaService->start();
+
   // Start advertising
   BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->addServiceUUID(OTA_SERVICE_UUID);
   pAdvertising->setScanResponse(true);
   pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
 
   Serial.println("BLE ready. Waiting for connection...");
+  Serial.print("Running firmware version ");
+  Serial.println(FIRMWARE_VERSION);
   Serial.println("Serial commands: 1=CoilA start, 2=CoilA stop, 3=CoilB start, 4=CoilB stop");
   Serial.println("60s inactivity -> light sleep (1hr), then deep sleep.");
   Serial.println();
@@ -304,7 +488,7 @@ void loop() {
   }
 
   // --- Sleep after inactivity ---
-  if (!coilAActive && !coilBActive && (millis() - lastActivityTime > LIGHT_SLEEP_TIMEOUT_MS)) {
+  if (!otaInProgress && !coilAActive && !coilBActive && (millis() - lastActivityTime > LIGHT_SLEEP_TIMEOUT_MS)) {
     // Configure ext1 wakeup on GPIO 12 or GPIO 14 going HIGH
     uint64_t wakeupPinMask = (1ULL << COIL_A_PIN) | (1ULL << COIL_B_PIN);
     esp_sleep_enable_ext1_wakeup(wakeupPinMask, ESP_EXT1_WAKEUP_ANY_HIGH);
