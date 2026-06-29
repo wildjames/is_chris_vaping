@@ -16,7 +16,7 @@ jobs:
       - name: Lint Dockerfile
         uses: hadolint/hadolint-action@v3.3.0
         with:
-          dockerfile: Dockerfile
+          dockerfile: server/Dockerfile
 
   build:
     name: Build and Push
@@ -39,7 +39,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: server/
           file: Dockerfile
           tags: wizenedchimp/is_chris_vaping:latest
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
