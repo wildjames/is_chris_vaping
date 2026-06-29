@@ -8,20 +8,22 @@ from pathlib import Path
 import redis
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+FIRMWARE_DIR = Path(os.environ.get("FIRMWARE_DIR", "/firmware"))
+AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
+
+
 SITE_DIR = Path(__file__).resolve().parent / "site"
 
 app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="/static")
 logging.basicConfig(level=logging.INFO)
 
-AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
 if not AUTH_TOKEN:
     raise RuntimeError("VAPE_API_TOKEN environment variable must be set")
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 VAPE_STATE_KEY = "vape_state"
-FIRMWARE_DIR = Path(os.environ.get("FIRMWARE_DIR", "/firmware"))
 REDIS_FIRMWARE_VERSION_KEY = "firmware:version"
 REDIS_FIRMWARE_SIZE_KEY = "firmware:size"
 REDIS_FIRMWARE_UPLOADED_AT_KEY = "firmware:uploaded_at"

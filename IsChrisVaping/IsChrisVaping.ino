@@ -1,4 +1,4 @@
-#include <WiFi.h>
+#include <esp_system.h>
 #include "version.h"
 #include "display.h"
 #include "bluetooth.h"
@@ -19,11 +19,13 @@ void setup() {
 
   sleepCheckWakeup();
 
-  // Disable WiFi to prevent GPIO2 conflict with display DC line
-  WiFi.mode(WIFI_OFF);
-
   displayInit();
   coilsInit();
+
+  // Show firmware version on power-on reset
+  if (esp_reset_reason() == ESP_RST_POWERON) {
+    showText(FIRMWARE_VERSION);
+  }
 
   // Reset inactivity timer
   lastActivityTime = millis();

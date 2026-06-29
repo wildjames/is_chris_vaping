@@ -12,7 +12,7 @@ import requests
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 VERSION_H = os.path.join(SCRIPT_DIR, "version.h")
 SKETCH_DIR = SCRIPT_DIR
-FQBN = "esp32:esp32:esp32:UploadSpeed=512000,CPUFreq=80,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,DebugLevel=none,PSRAM=disabled,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default"
+FQBN = "esp32:esp32:esp32:CPUFreq=80,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,EraseFlash=none"
 
 
 def read_version():
