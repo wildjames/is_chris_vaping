@@ -71,7 +71,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val responseQueue = LinkedBlockingQueue<ByteArray>()
     private val writeSemaphore = Semaphore(0)
-    private var lastWriteStatus: Int = BluetoothGatt.GATT_SUCCESS
+    @Volatile private var lastWriteStatus: Int = BluetoothGatt.GATT_SUCCESS
     private val executor = Executors.newSingleThreadExecutor()
 
     private val rssiRunnable = object : Runnable {
@@ -341,7 +341,7 @@ class OtaUpdateActivity : AppCompatActivity() {
 
         isUpdating = true
 
-        Thread {
+        executor.execute {
             val maxAttempts = 3
             var lastError: Exception? = null
 
@@ -379,7 +379,7 @@ class OtaUpdateActivity : AppCompatActivity() {
                     startUpdateButton.isEnabled = true
                 }
             }
-        }.start()
+        }
     }
 
     @SuppressLint("MissingPermission")

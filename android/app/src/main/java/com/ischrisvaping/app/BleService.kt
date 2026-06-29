@@ -23,6 +23,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.Executors
+import org.json.JSONObject
 
 class BleService : Service() {
 
@@ -63,6 +64,7 @@ class BleService : Service() {
     var gattEventListener: GattEventListener? = null
 
     private val httpExecutor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var serverUrl: String = ""
     private var authToken: String = ""
@@ -410,7 +412,11 @@ class BleService : Service() {
                 connection.connectTimeout = 10000
                 connection.readTimeout = 10000
 
-                val json = """{"coil":"$coil","event":"$event","timestamp":${System.currentTimeMillis()}}"""
+                val json = JSONObject().apply {
+                    put("coil", coil)
+                    put("event", event)
+                    put("timestamp", System.currentTimeMillis())
+                }.toString()
 
                 OutputStreamWriter(connection.outputStream).use { writer ->
                     writer.write(json)
@@ -431,7 +437,7 @@ class BleService : Service() {
     }
 
     private fun showToast(message: String) {
-        Handler(Looper.getMainLooper()).post {
+        mainHandler.post {
             Toast.makeText(this@BleService, message, Toast.LENGTH_SHORT).show()
         }
     }
