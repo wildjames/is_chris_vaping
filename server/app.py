@@ -18,7 +18,7 @@ AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
 
 SITE_DIR = Path(__file__).resolve().parent / "site"
 
-app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="/static")
+app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="")
 logging.basicConfig(level=logging.INFO)
 
 if not AUTH_TOKEN:
