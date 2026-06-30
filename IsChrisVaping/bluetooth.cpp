@@ -19,12 +19,23 @@ const char* MSG_COIL_B_STARTED = "COIL_B:STARTED";
 const char* MSG_COIL_B_STOPPED = "COIL_B:STOPPED";
 
 void loadVapeName() {
-  prefs.begin("vape", true);  // read-only
-  String name = prefs.getString("name", DEFAULT_VAPE_NAME);
+  prefs.begin("vape", false);  // read-write in case we need to generate a default
+  String name = prefs.getString("name", "");
+  if (name.length() == 0) {
+    // First boot: generate a unique default name with 4 random digits
+    char defaultName[MAX_VAPE_NAME_LEN + 1];
+    int suffix = random(0, 10000);
+    snprintf(defaultName, sizeof(defaultName), "%s %04d", DEFAULT_VAPE_NAME, suffix);
+    prefs.putString("name", defaultName);
+    strncpy(vapeName, defaultName, MAX_VAPE_NAME_LEN);
+    vapeName[MAX_VAPE_NAME_LEN] = '\0';
+    Serial.printf("Generated default vape name: %s\n", vapeName);
+  } else {
+    strncpy(vapeName, name.c_str(), MAX_VAPE_NAME_LEN);
+    vapeName[MAX_VAPE_NAME_LEN] = '\0';
+    Serial.printf("Loaded vape name: %s\n", vapeName);
+  }
   prefs.end();
-  strncpy(vapeName, name.c_str(), MAX_VAPE_NAME_LEN);
-  vapeName[MAX_VAPE_NAME_LEN] = '\0';
-  Serial.printf("Loaded vape name: %s\n", vapeName);
 }
 
 void saveVapeName(const char* name) {
