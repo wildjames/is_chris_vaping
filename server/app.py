@@ -229,6 +229,14 @@ def device_rename():
             ).scalar_one_or_none()
 
         if device is None:
+            # Check if device with new_name already exists
+            existing = session.execute(
+                select(Device).where(Device.name == new_name)
+            ).scalar_one_or_none()
+            if existing:
+                app.logger.info("Device already exists with name: %s", new_name)
+                return jsonify({"status": "ok", "old_name": old_name, "new_name": new_name}), 200
+
             # Device doesn't exist yet - create it with the new name
             device = Device(name=new_name)
             session.add(device)
