@@ -1,2 +1,2 @@
 // Firmware version
-#define FIRMWARE_VERSION "1.1.8"
+#define FIRMWARE_VERSION "<version>"
