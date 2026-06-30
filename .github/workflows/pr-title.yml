@@ -9,7 +9,16 @@ jobs:
   check-title:
     runs-on: ubuntu-latest
     steps:
+      - name: Check for Arduino code changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            firmware:
+              - 'IsChrisVaping/**'
+
       - name: Check PR title prefix
+        if: steps.filter.outputs.firmware == 'true'
         run: |
           TITLE="${{ github.event.pull_request.title }}"
           if [[ "$TITLE" =~ ^(MAJOR|MINOR|PATCH) ]]; then
@@ -18,3 +27,7 @@ jobs:
             echo "::error::PR title must start with MAJOR, MINOR, or PATCH. Got: $TITLE"
             exit 1
           fi
+
+      - name: Skip title check
+        if: steps.filter.outputs.firmware == 'false'
+        run: echo "No Arduino code changes, skipping PR title prefix check."
