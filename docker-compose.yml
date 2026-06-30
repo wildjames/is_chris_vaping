@@ -7,16 +7,41 @@ services:
       - VAPE_API_TOKEN=${VAPE_API_TOKEN}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - DB_USER=vape
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=vape
     volumes:
       - firmware_data:/firmware
       - ./server/site:/app/site
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      mariadb:
+        condition: service_healthy
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
 
+  mariadb:
+    image: mariadb:11
+    environment:
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MARIADB_DATABASE=vape
+      - MARIADB_USER=vape
+      - MARIADB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   firmware_data:
+  mariadb_data:
