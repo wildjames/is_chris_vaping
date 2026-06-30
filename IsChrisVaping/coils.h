@@ -8,9 +8,11 @@
 #define COIL_B_PIN 14
 
 // Voltage threshold for detecting a draw
-// With 2:1 voltage divider: 4V coil -> 2V at pin, 1.2V check -> 0.6V at pin
-// Threshold at ~1.2V (midpoint) = 1365 ADC counts (11dB attenuation, 0-3.6V range)
-#define DRAW_THRESHOLD 1365
+// I measure the coil voltage at ~1V when active, and 0 when not.
+// With 6dB attenuation (0-2.2V range), active signal reads ~1800 counts.
+// Threshold set at ~900 (midpoint between noise floor and active signal).
+#define COIL_ATTENUATION ADC_6db
+#define DRAW_THRESHOLD 900
 
 // Debounce: coil must be above threshold for this many consecutive reads
 #define DEBOUNCE_COUNT 5

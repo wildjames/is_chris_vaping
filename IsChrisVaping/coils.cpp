@@ -14,51 +14,51 @@ static int coilACount = 0;
 static int coilBCount = 0;
 
 void coilsInit() {
-  analogSetAttenuation(ADC_11db);
+  analogSetAttenuation(COIL_ATTENUATION);
   pinMode(COIL_A_PIN, INPUT);
   pinMode(COIL_B_PIN, INPUT);
 }
 
 void coilsUpdate() {
   // --- Coil A detection ---
-  // int coilAReading = analogRead(COIL_A_PIN);
-  // if (coilAReading > DRAW_THRESHOLD) {
-  //   if (coilACount < DEBOUNCE_COUNT) coilACount++;
-  //   if (coilACount >= DEBOUNCE_COUNT && !coilAActive) {
-  //     coilAActive = true;
-  //     lastActivityTime = millis();
-  //     Serial.print("Coil A senses ");
-  //     Serial.println(coilAReading);
-  //     handleCoilAStarted();
-  //   }
-  // } else {
-  //   if (coilACount > 0) coilACount--;
-  //   if (coilACount == 0 && coilAActive) {
-  //     coilAActive = false;
-  //     lastActivityTime = millis();
-  //     handleCoilAStopped();
-  //   }
-  // }
+  int coilAReading = analogRead(COIL_A_PIN);
+  if (coilAReading > DRAW_THRESHOLD) {
+    if (coilACount < DEBOUNCE_COUNT) coilACount++;
+    if (coilACount >= DEBOUNCE_COUNT && !coilAActive) {
+      coilAActive = true;
+      lastActivityTime = millis();
+      Serial.print("Coil A senses ");
+      Serial.println(coilAReading);
+      handleCoilAStarted();
+    }
+  } else {
+    if (coilACount > 0) coilACount--;
+    if (coilACount == 0 && coilAActive) {
+      coilAActive = false;
+      lastActivityTime = millis();
+      handleCoilAStopped();
+    }
+  }
 
-  // // --- Coil B detection ---
-  // int coilBReading = analogRead(COIL_B_PIN);
-  // if (coilBReading > DRAW_THRESHOLD) {
-  //   if (coilBCount < DEBOUNCE_COUNT) coilBCount++;
-  //   if (coilBCount >= DEBOUNCE_COUNT && !coilBActive) {
-  //     coilBActive = true;
-  //     lastActivityTime = millis();
-  //     Serial.print("Coil B senses ");
-  //     Serial.println(coilBReading);
-  //     handleCoilBStarted();
-  //   }
-  // } else {
-  //   if (coilBCount > 0) coilBCount--;
-  //   if (coilBCount == 0 && coilBActive) {
-  //     coilBActive = false;
-  //     lastActivityTime = millis();
-  //     handleCoilBStopped();
-  //   }
-  // }
+  // --- Coil B detection ---
+  int coilBReading = analogRead(COIL_B_PIN);
+  if (coilBReading > DRAW_THRESHOLD) {
+    if (coilBCount < DEBOUNCE_COUNT) coilBCount++;
+    if (coilBCount >= DEBOUNCE_COUNT && !coilBActive) {
+      coilBActive = true;
+      lastActivityTime = millis();
+      Serial.print("Coil B senses ");
+      Serial.println(coilBReading);
+      handleCoilBStarted();
+    }
+  } else {
+    if (coilBCount > 0) coilBCount--;
+    if (coilBCount == 0 && coilBActive) {
+      coilBActive = false;
+      lastActivityTime = millis();
+      handleCoilBStopped();
+    }
+  }
 }
 
 void handleCoilAStarted() {
