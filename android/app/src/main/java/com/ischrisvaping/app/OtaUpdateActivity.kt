@@ -45,6 +45,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         private const val OTA_RSP_ACK: Byte = 0x13
 
         private const val CHUNK_SIZE = 509 // MTU 512 - 3 bytes ATT overhead
+        private const val ACK_INTERVAL = 50 // Must match ESP32 OTA_ACK_INTERVAL
     }
 
     private lateinit var statusText: TextView
@@ -416,7 +417,7 @@ class OtaUpdateActivity : AppCompatActivity() {
 
         mainHandler.post { updateStatus("Transferring firmware...") }
 
-        // Send firmware data in chunks
+        // Send firmware data in chunks with flow control
         val chunkSize = minOf(CHUNK_SIZE, mtuSize - 3)
         var offset = 0
         var chunksSent = 0
@@ -459,16 +460,37 @@ class OtaUpdateActivity : AppCompatActivity() {
                 progressText.text = "${offset / 1024}KB / ${size / 1024}KB ($progress%)"
             }
 
-            // Check for error notifications (non-blocking)
-            val notification = responseQueue.poll()
-            if (notification != null && notification[0] == OTA_RSP_ERROR) {
-                throw Exception("Device reported error during transfer (code: ${notification.getOrNull(1) ?: "unknown"})")
+            // Every ACK_INTERVAL chunks, wait for ACK from ESP32 with byte count verification
+            if (chunksSent % ACK_INTERVAL == 0) {
+                val ack = responseQueue.poll(10, TimeUnit.SECONDS)
+                if (ack == null) {
+                    throw Exception("No ACK from device after $chunksSent chunks (offset $offset)")
+                }
+                if (ack[0] == OTA_RSP_ERROR) {
+                    throw Exception("Device reported error during transfer (code: ${ack.getOrNull(1) ?: "unknown"})")
+                }
+                if (ack[0] == OTA_RSP_ACK && ack.size >= 5) {
+                    val deviceReceived = (ack[1].toInt() and 0xFF) or
+                            ((ack[2].toInt() and 0xFF) shl 8) or
+                            ((ack[3].toInt() and 0xFF) shl 16) or
+                            ((ack[4].toInt() and 0xFF) shl 24)
+                    if (deviceReceived != offset) {
+                        throw Exception("Dropped packets: sent $offset bytes but device received $deviceReceived")
+                    }
+                    Log.d(TAG, "ACK verified: $deviceReceived bytes received by device")
+                }
+            } else {
+                // Non-blocking check for error notifications between ACK intervals
+                val notification = responseQueue.poll()
+                if (notification != null && notification[0] == OTA_RSP_ERROR) {
+                    throw Exception("Device reported error during transfer (code: ${notification.getOrNull(1) ?: "unknown"})")
+                }
             }
         }
 
         mainHandler.post { updateStatus("Transfer complete, verifying...") }
 
-        // Drain any stale ACK notifications before sending END
+        // Drain any stale notifications before sending END
         while (responseQueue.poll() != null) { /* discard */ }
 
         // Send END command - device will reboot on success, which may disconnect BLE
