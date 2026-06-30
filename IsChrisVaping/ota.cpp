@@ -20,6 +20,8 @@ extern unsigned long lastActivityTime;
 bool otaInProgress = false;
 static uint32_t otaExpectedSize = 0;
 static uint32_t otaReceivedSize = 0;
+static uint32_t otaChunkCount = 0;
+static const uint32_t OTA_ACK_INTERVAL = 50;
 static BLECharacteristic* pOtaControl = NULL;
 static BLECharacteristic* pOtaData = NULL;
 static BLECharacteristic* pOtaVersion = NULL;
@@ -58,6 +60,7 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks {
                           ((uint32_t)data[3] << 16) |
                           ((uint32_t)data[4] << 24);
         otaReceivedSize = 0;
+        otaChunkCount = 0;
 
         Serial.printf("OTA begin: expecting %u bytes\n", otaExpectedSize);
 
@@ -150,9 +153,19 @@ class OtaDataCallbacks : public BLECharacteristicCallbacks {
     }
 
     otaReceivedSize += len;
-    // Only write progress every 50 chunks
-    if (otaReceivedSize % (50 * len) < len) {
-      Serial.printf("OTA received: %u / %u bytes\n", otaReceivedSize, otaExpectedSize);
+    otaChunkCount++;
+
+    // Send ACK with byte count every N chunks for flow control
+    if (otaChunkCount % OTA_ACK_INTERVAL == 0) {
+      uint8_t ack[5];
+      ack[0] = OTA_RSP_ACK;
+      ack[1] = (uint8_t)(otaReceivedSize & 0xFF);
+      ack[2] = (uint8_t)((otaReceivedSize >> 8) & 0xFF);
+      ack[3] = (uint8_t)((otaReceivedSize >> 16) & 0xFF);
+      ack[4] = (uint8_t)((otaReceivedSize >> 24) & 0xFF);
+      Serial.printf("OTA ACK: %u / %u bytes\n", otaReceivedSize, otaExpectedSize);
+      pOtaControl->setValue(ack, 5);
+      pOtaControl->notify();
     }
   }
 };

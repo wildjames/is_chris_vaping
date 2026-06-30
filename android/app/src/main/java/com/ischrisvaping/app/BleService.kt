@@ -132,7 +132,9 @@ class BleService : Service() {
         if (enabled) {
             startScan()
         } else {
-            stopScan()
+            // Unconditionally stop scanning regardless of isScanning state
+            bluetoothLeScanner?.stopScan(scanCallback)
+            isScanning = false
             bluetoothGatt?.disconnect()
             bluetoothGatt?.close()
             bluetoothGatt = null

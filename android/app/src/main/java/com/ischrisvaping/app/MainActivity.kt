@@ -73,10 +73,6 @@ class MainActivity : AppCompatActivity() {
             showSettingsDialog()
         }
 
-        findViewById<Button>(R.id.scanQrButton).setOnClickListener {
-            startActivity(Intent(this, QrScanActivity::class.java))
-        }
-
         findViewById<Button>(R.id.otaButton).setOnClickListener {
             startActivity(Intent(this, OtaUpdateActivity::class.java))
         }
