@@ -10,30 +10,23 @@ extern unsigned long notRippedTimerStart;
 // Coil state tracking
 bool coilAActive = false;
 bool coilBActive = false;
-static int coilACount = 0;
-static int coilBCount = 0;
 
 void coilsInit() {
-  analogSetAttenuation(COIL_ATTENUATION);
   pinMode(COIL_A_PIN, INPUT);
   pinMode(COIL_B_PIN, INPUT);
 }
 
 void coilsUpdate() {
   // --- Coil A detection ---
-  int coilAReading = analogRead(COIL_A_PIN);
-  if (coilAReading > DRAW_THRESHOLD) {
-    if (coilACount < DEBOUNCE_COUNT) coilACount++;
-    if (coilACount >= DEBOUNCE_COUNT && !coilAActive) {
+  if (digitalRead(COIL_A_PIN) == HIGH) {
+    if (!coilAActive) {
       coilAActive = true;
       lastActivityTime = millis();
-      Serial.print("Coil A senses ");
-      Serial.println(coilAReading);
+      Serial.println("Coil A active");
       handleCoilAStarted();
     }
   } else {
-    if (coilACount > 0) coilACount--;
-    if (coilACount == 0 && coilAActive) {
+    if (coilAActive) {
       coilAActive = false;
       lastActivityTime = millis();
       handleCoilAStopped();
@@ -41,19 +34,15 @@ void coilsUpdate() {
   }
 
   // --- Coil B detection ---
-  int coilBReading = analogRead(COIL_B_PIN);
-  if (coilBReading > DRAW_THRESHOLD) {
-    if (coilBCount < DEBOUNCE_COUNT) coilBCount++;
-    if (coilBCount >= DEBOUNCE_COUNT && !coilBActive) {
+  if (digitalRead(COIL_B_PIN) == HIGH) {
+    if (!coilBActive) {
       coilBActive = true;
       lastActivityTime = millis();
-      Serial.print("Coil B senses ");
-      Serial.println(coilBReading);
+      Serial.println("Coil B active");
       handleCoilBStarted();
     }
   } else {
-    if (coilBCount > 0) coilBCount--;
-    if (coilBCount == 0 && coilBActive) {
+    if (coilBActive) {
       coilBActive = false;
       lastActivityTime = millis();
       handleCoilBStopped();

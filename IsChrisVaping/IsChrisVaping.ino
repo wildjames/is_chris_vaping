@@ -17,8 +17,6 @@ const unsigned long NOT_RIPPED_DELAY_MS = 3000;
 void setup() {
   Serial.begin(115200);
 
-  sleepCheckWakeup();
-
   bluetoothInit();
   displayInit();
   coilsInit();
@@ -38,6 +36,7 @@ void setup() {
 
 void loop() {
   coilsUpdate();
+  bluetoothUpdate();
 
   // --- NOT_RIPPED timer ---
   if (notRippedTimerActive && (millis() - notRippedTimerStart >= NOT_RIPPED_DELAY_MS)) {
