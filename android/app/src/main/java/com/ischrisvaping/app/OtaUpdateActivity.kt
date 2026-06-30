@@ -99,7 +99,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         }
     }
 
-    private val gattEventListener = object : BleService.GattEventListener {
+    private val gattEventListener = object : GattConnectionManager.GattEventListener {
         override fun onCharacteristicChanged(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             if (characteristic.uuid == OTA_CONTROL_UUID) {
                 responseQueue.offer(value)
@@ -170,7 +170,15 @@ class OtaUpdateActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun onBleServiceConnected() {
-        val gatt = bleService?.gatt
+        // Select the connected device for OTA event forwarding
+        val connectedDevice = bleService?.devices?.values?.firstOrNull { it.connected }
+        if (connectedDevice == null) {
+            updateStatus("Device not connected - go back and wait for connection")
+            return
+        }
+        bleService?.selectedDeviceAddress = connectedDevice.address
+
+        val gatt = connectedDevice.gatt
         if (gatt == null) {
             updateStatus("Device not connected - go back and wait for connection")
             return
@@ -574,6 +582,7 @@ class OtaUpdateActivity : AppCompatActivity() {
             }
         }
         bleService?.gattEventListener = null
+        bleService?.selectedDeviceAddress = null
         if (serviceBound) {
             unbindService(serviceConnection)
             serviceBound = false
