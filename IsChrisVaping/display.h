@@ -25,5 +25,6 @@ extern const char* currentDisplayText;
 void displayInit();
 void showText(const char* text);
 void drawBtIcon();
+void drawVapeName();
 
 #endif
