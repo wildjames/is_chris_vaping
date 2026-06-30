@@ -19,6 +19,7 @@ void setup() {
 
   sleepCheckWakeup();
 
+  bluetoothInit();
   displayInit();
   coilsInit();
 
@@ -29,8 +30,6 @@ void setup() {
 
   // Reset inactivity timer
   lastActivityTime = millis();
-
-  bluetoothInit();
 
   Serial.printf("Firmware version: %s\n", FIRMWARE_VERSION);
   Serial.println("Serial commands: 1=CoilA start, 2=CoilA stop, 3=CoilB start, 4=CoilB stop");
