@@ -1,0 +1,78 @@
+name: Build and Upload Firmware
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version bump
+        id: bump
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if [[ "$TITLE" =~ ^MAJOR ]]; then
+            echo "type=MAJOR" >> $GITHUB_OUTPUT
+          elif [[ "$TITLE" =~ ^MINOR ]]; then
+            echo "type=MINOR" >> $GITHUB_OUTPUT
+          elif [[ "$TITLE" =~ ^PATCH ]]; then
+            echo "type=PATCH" >> $GITHUB_OUTPUT
+          else
+            echo "::error::PR title must start with MAJOR, MINOR, or PATCH"
+            exit 1
+          fi
+
+      - name: Bump version
+        id: version
+        run: |
+          CURRENT=$(grep -oP '#define FIRMWARE_VERSION "\K[^"]+' IsChrisVaping/version.h)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "${{ steps.bump.outputs.type }}" in
+            MAJOR) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            MINOR) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            PATCH) PATCH=$((PATCH + 1)) ;;
+          esac
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "// Firmware version" > IsChrisVaping/version.h
+          echo "#define FIRMWARE_VERSION \"$NEW_VERSION\"" >> IsChrisVaping/version.h
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add IsChrisVaping/version.h
+          git commit -m "Bump firmware version to ${{ steps.version.outputs.version }}"
+          git push
+
+      - name: Install arduino-cli
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+          echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Install ESP32 core
+        run: |
+          arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+      - name: Compile firmware
+        run: |
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32:CPUFreq=80,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,EraseFlash=none" \
+            IsChrisVaping
+
+      - name: Upload firmware to server
+        run: |
+          curl -f -X POST \
+            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}" \
+            -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
+            -F "file=@IsChrisVaping/build/esp32.esp32.esp32/IsChrisVaping.ino.bin;type=application/octet-stream"
