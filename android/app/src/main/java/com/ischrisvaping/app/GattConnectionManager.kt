@@ -24,11 +24,15 @@ class GattConnectionManager(
         private const val SCAN_WINDOW_MS = 30000L
         private const val RECONNECT_DELAY_MS = 2000L
         private const val NAME_READ_DELAY_MS = 500L
+        private const val VERSION_READ_DELAY_MS = 1000L
 
         val SERVICE_UUID: UUID = UUID.fromString("189a9192-f68f-4ac4-962e-d70e7c3755a0")
         val CHARACTERISTIC_UUID: UUID = UUID.fromString("5cf4a205-84e1-42ad-ac23-e5adc776a992")
         val NAME_CHARACTERISTIC_UUID: UUID = UUID.fromString("5cf4a205-84e1-42ad-ac23-e5adc776a993")
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+        val OTA_SERVICE_UUID: UUID = UUID.fromString("fb1e4001-54ae-4a28-9f74-dfccb248601d")
+        val OTA_VERSION_UUID: UUID = UUID.fromString("fb1e4004-54ae-4a28-9f74-dfccb248601d")
     }
 
     interface GattEventListener {
@@ -247,6 +251,13 @@ class GattConnectionManager(
                 mainHandler.postDelayed({ gatt.readCharacteristic(nameChar) }, NAME_READ_DELAY_MS)
             }
 
+            // Read firmware version from OTA service
+            val otaService = gatt.getService(OTA_SERVICE_UUID)
+            val versionChar = otaService?.getCharacteristic(OTA_VERSION_UUID)
+            if (versionChar != null) {
+                mainHandler.postDelayed({ gatt.readCharacteristic(versionChar) }, VERSION_READ_DELAY_MS)
+            }
+
             statusNotifier.updateStatus(statusNotifier.getOverallStatus(deviceRepository.devices.values))
         }
 
@@ -263,6 +274,13 @@ class GattConnectionManager(
                         Log.d(TAG, "Read device name from ESP32: $name (was: ${vapeDevice.name})")
                         vapeDevice.name = name
                         deviceRepository.save()
+                        statusNotifier.broadcastDevicesChanged()
+                    }
+                } else if (characteristic.uuid == OTA_VERSION_UUID) {
+                    val version = value.toString(Charsets.UTF_8).trim()
+                    if (version.isNotEmpty()) {
+                        Log.d(TAG, "Read firmware version from ${vapeDevice.name}: $version")
+                        vapeDevice.firmwareVersion = version
                         statusNotifier.broadcastDevicesChanged()
                     }
                 } else if (characteristic.uuid == CHARACTERISTIC_UUID) {

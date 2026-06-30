@@ -68,6 +68,8 @@ class OtaUpdateActivity : AppCompatActivity() {
     private var mtuSize = 23
     private var deviceFirmwareVersion: String? = null
     private var serverFirmwareVersion: String? = null
+    private var awaitingReconnect = false
+    private var targetDeviceAddress: String? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val responseQueue = LinkedBlockingQueue<ByteArray>()
@@ -112,7 +114,17 @@ class OtaUpdateActivity : AppCompatActivity() {
                 deviceFirmwareVersion = version
                 mainHandler.post {
                     versionText.text = "Device firmware: v$version"
-                    checkUpdateAvailable()
+                    if (awaitingReconnect) {
+                        awaitingReconnect = false
+                        if (version == serverFirmwareVersion) {
+                            updateStatus("Update confirmed! Now running v$version")
+                        } else {
+                            updateStatus("Device reconnected with v$version (expected v$serverFirmwareVersion)")
+                        }
+                        startUpdateButton.isEnabled = false
+                    } else {
+                        checkUpdateAvailable()
+                    }
                 }
             }
         }
@@ -161,6 +173,8 @@ class OtaUpdateActivity : AppCompatActivity() {
             startOtaUpdate()
         }
 
+        targetDeviceAddress = intent.getStringExtra("device_address")
+
         // Bind to the existing BLE service
         updateStatus("Connecting to BLE service...")
         bindService(Intent(this, BleService::class.java), serviceConnection, BIND_AUTO_CREATE)
@@ -170,8 +184,12 @@ class OtaUpdateActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun onBleServiceConnected() {
-        // Select the connected device for OTA event forwarding
-        val connectedDevice = bleService?.devices?.values?.firstOrNull { it.connected }
+        // Select the target device for OTA event forwarding
+        val connectedDevice = if (targetDeviceAddress != null) {
+            bleService?.devices?.get(targetDeviceAddress)?.takeIf { it.connected }
+        } else {
+            bleService?.devices?.values?.firstOrNull { it.connected }
+        }
         if (connectedDevice == null) {
             updateStatus("Device not connected - go back and wait for connection")
             return
@@ -509,11 +527,11 @@ class OtaUpdateActivity : AppCompatActivity() {
             if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
                 Log.w(TAG, "END command write timed out - device likely rebooted")
                 mainHandler.post {
-                    updateStatus("Update likely successful - device is rebooting...")
                     progressBar.progress = 100
                     progressText.text = "Complete!"
                 }
                 isUpdating = false
+                waitForReconnect()
                 return
             }
 
@@ -521,20 +539,22 @@ class OtaUpdateActivity : AppCompatActivity() {
             val endResponse = responseQueue.poll(10, TimeUnit.SECONDS)
             if (endResponse != null && endResponse[0] == OTA_RSP_OK) {
                 mainHandler.post {
-                    updateStatus("Update successful! Device is rebooting...")
                     progressBar.progress = 100
                     progressText.text = "Complete!"
                 }
+                isUpdating = false
+                waitForReconnect()
             } else if (endResponse != null && endResponse[0] == OTA_RSP_ERROR) {
                 throw Exception("Verification failed on device (code: ${endResponse.getOrNull(1) ?: "unknown"})")
             } else {
                 // No response - device likely already rebooted (success)
                 Log.w(TAG, "No END response - device likely rebooted")
                 mainHandler.post {
-                    updateStatus("Update likely successful - device is rebooting...")
                     progressBar.progress = 100
                     progressText.text = "Complete!"
                 }
+                isUpdating = false
+                waitForReconnect()
             }
         } catch (e: Exception) {
             // If the exception is from the END phase and not an explicit device error,
@@ -544,13 +564,12 @@ class OtaUpdateActivity : AppCompatActivity() {
             }
             Log.w(TAG, "END phase failed (device likely rebooted): ${e.message}")
             mainHandler.post {
-                updateStatus("Update likely successful - device is rebooting...")
                 progressBar.progress = 100
                 progressText.text = "Complete!"
             }
+            isUpdating = false
+            waitForReconnect()
         }
-
-        isUpdating = false
     }
 
     private fun updateRssiDisplay(rssi: Int) {
@@ -562,6 +581,55 @@ class OtaUpdateActivity : AppCompatActivity() {
             else -> "Very weak"
         }
         rssiText.text = "Signal: $rssi dBm ($label)"
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun waitForReconnect() {
+        awaitingReconnect = true
+        mainHandler.removeCallbacks(rssiRunnable)
+        mainHandler.post {
+            rssiText.text = ""
+            updateStatus("Waiting for device to reboot...")
+        }
+
+        executor.execute {
+            val maxWaitMs = 30000L
+            val pollIntervalMs = 500L
+            val startTime = System.currentTimeMillis()
+
+            // Wait for disconnect first
+            while (System.currentTimeMillis() - startTime < maxWaitMs) {
+                val device = bleService?.devices?.values?.firstOrNull {
+                    it.address == (targetDeviceAddress ?: bleService?.selectedDeviceAddress)
+                }
+                if (device == null || !device.connected) break
+                Thread.sleep(pollIntervalMs)
+            }
+
+            mainHandler.post { updateStatus("Device rebooting, waiting for reconnection...") }
+
+            // Now wait for reconnect
+            while (System.currentTimeMillis() - startTime < maxWaitMs) {
+                val device = bleService?.devices?.values?.firstOrNull {
+                    it.address == (targetDeviceAddress ?: bleService?.selectedDeviceAddress) && it.connected
+                }
+                if (device != null && device.gatt != null) {
+                    bluetoothGatt = device.gatt
+                    mainHandler.post {
+                        updateStatus("Reconnected! Reading firmware version...")
+                        bluetoothGatt?.requestMtu(512)
+                    }
+                    return@execute
+                }
+                Thread.sleep(pollIntervalMs)
+            }
+
+            // Timeout
+            mainHandler.post {
+                awaitingReconnect = false
+                updateStatus("Update likely successful but device didn't reconnect in time")
+            }
+        }
     }
 
     private fun updateStatus(message: String) {

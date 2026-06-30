@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -21,10 +22,15 @@ import androidx.recyclerview.widget.RecyclerView
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val REQUEST_PERMISSIONS = 1
     }
 
@@ -35,6 +41,8 @@ class MainActivity : AppCompatActivity() {
 
     private var bleService: BleService? = null
     private var serviceBound = false
+    private var serverFirmwareVersion: String? = null
+    private val executor = Executors.newSingleThreadExecutor()
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -83,17 +91,15 @@ class MainActivity : AppCompatActivity() {
 
         deviceAdapter = DeviceAdapter(
             onRename = { device -> showRenameDialog(device) },
-            onRemove = { device -> showRemoveDialog(device) }
+            onRemove = { device -> showRemoveDialog(device) },
+            onUpdate = { device -> launchOtaUpdate(device) },
+            serverFirmwareVersion = { serverFirmwareVersion }
         )
         deviceList.layoutManager = LinearLayoutManager(this)
         deviceList.adapter = deviceAdapter
 
         findViewById<Button>(R.id.settingsButton).setOnClickListener {
             showSettingsDialog()
-        }
-
-        findViewById<Button>(R.id.otaButton).setOnClickListener {
-            startActivity(Intent(this, OtaUpdateActivity::class.java))
         }
 
         val bluetoothToggle = findViewById<SwitchCompat>(R.id.bluetoothToggle)
@@ -108,11 +114,53 @@ class MainActivity : AppCompatActivity() {
         } else {
             startBleService()
         }
+
+        fetchServerFirmwareVersion()
     }
 
     private fun refreshDeviceList() {
         val devices = bleService?.devices?.values?.toList() ?: emptyList()
         deviceAdapter.submitList(devices)
+    }
+
+    private fun launchOtaUpdate(device: VapeDevice) {
+        val intent = Intent(this, OtaUpdateActivity::class.java)
+        intent.putExtra("device_address", device.address)
+        startActivity(intent)
+    }
+
+    private fun fetchServerFirmwareVersion() {
+        executor.execute {
+            try {
+                val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
+                val serverUrl = prefs.getString("server_url", "") ?: ""
+                if (serverUrl.isBlank()) return@execute
+
+                val baseUrl = try {
+                    val parsed = URL(serverUrl)
+                    "${parsed.protocol}://${parsed.host}${if (parsed.port != -1 && parsed.port != parsed.defaultPort) ":${parsed.port}" else ""}"
+                } catch (_: Exception) { return@execute }
+
+                val url = URL("$baseUrl/firmware/latest")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+
+                if (connection.responseCode == 200) {
+                    val body = connection.inputStream.bufferedReader().readText()
+                    val json = JSONObject(body)
+                    val version = json.getString("version")
+                    runOnUiThread {
+                        serverFirmwareVersion = version
+                        refreshDeviceList()
+                    }
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch server firmware version", e)
+            }
+        }
     }
 
     private fun showRenameDialog(device: VapeDevice) {
@@ -252,7 +300,9 @@ class MainActivity : AppCompatActivity() {
 
     inner class DeviceAdapter(
         private val onRename: (VapeDevice) -> Unit,
-        private val onRemove: (VapeDevice) -> Unit
+        private val onRemove: (VapeDevice) -> Unit,
+        private val onUpdate: (VapeDevice) -> Unit,
+        private val serverFirmwareVersion: () -> String?
     ) : RecyclerView.Adapter<DeviceAdapter.ViewHolder>() {
 
         private var items: List<VapeDevice> = emptyList()
@@ -266,6 +316,7 @@ class MainActivity : AppCompatActivity() {
             val nameText: TextView = view.findViewById(R.id.deviceName)
             val statusText: TextView = view.findViewById(R.id.deviceStatus)
             val renameButton: Button = view.findViewById(R.id.renameButton)
+            val updateButton: Button = view.findViewById(R.id.updateButton)
             val removeButton: Button = view.findViewById(R.id.removeButton)
         }
 
@@ -286,6 +337,14 @@ class MainActivity : AppCompatActivity() {
             holder.renameButton.isEnabled = device.connected
             holder.renameButton.setOnClickListener { onRename(device) }
             holder.removeButton.setOnClickListener { onRemove(device) }
+
+            // Show update button only if device is connected, has a firmware version,
+            // and that version differs from the server's latest
+            val serverVer = serverFirmwareVersion()
+            val deviceVer = device.firmwareVersion
+            val updateAvailable = device.connected && deviceVer != null && serverVer != null && deviceVer != serverVer
+            holder.updateButton.visibility = if (updateAvailable) View.VISIBLE else View.GONE
+            holder.updateButton.setOnClickListener { onUpdate(device) }
         }
 
         override fun getItemCount() = items.size
