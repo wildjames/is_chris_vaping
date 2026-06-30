@@ -39,26 +39,6 @@ void setup() {
 void loop() {
   coilsUpdate();
 
-  // --- Serial commands for testing ---
-  if (Serial.available()) {
-    char input = Serial.read();
-
-    switch (input) {
-      case '1':
-        handleCoilAStarted();
-        break;
-      case '2':
-        handleCoilAStopped();
-        break;
-      case '3':
-        handleCoilBStarted();
-        break;
-      case '4':
-        handleCoilBStopped();
-        break;
-    }
-  }
-
   // --- NOT_RIPPED timer ---
   if (notRippedTimerActive && (millis() - notRippedTimerStart >= NOT_RIPPED_DELAY_MS)) {
     notRippedTimerActive = false;
@@ -79,5 +59,6 @@ void loop() {
   // --- Sleep after inactivity ---
   sleepUpdate();
 
+  // Allow breathing room for idle tasks (possibly not needed? two cores)
   delay(10);
 }
