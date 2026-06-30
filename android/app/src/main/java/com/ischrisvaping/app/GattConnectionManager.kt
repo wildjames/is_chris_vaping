@@ -94,6 +94,9 @@ class GattConnectionManager(
         } else {
             stopScan()
             for (device in deviceRepository.devices.values) {
+                if (device.connected) {
+                    stateTracker.handleDisconnection(device)
+                }
                 device.gatt?.disconnect()
                 device.gatt?.close()
                 device.gatt = null
@@ -303,6 +306,7 @@ class GattConnectionManager(
     }
 
     private fun handleIncomingData(text: String, device: VapeDevice) {
+        if (!isEnabled) return
         stateTracker.handleMessage(text, device)
         statusNotifier.updateData(text, device.address)
         statusNotifier.updateNotification(statusNotifier.getOverallStatus(deviceRepository.devices.values))

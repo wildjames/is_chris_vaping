@@ -115,9 +115,13 @@ class BleService : Service() {
     }
 
     fun renameDevice(address: String, newName: String) {
-        val device = deviceRepository.rename(address, newName) ?: return
-        connectionManager.writeNameToDevice(device, newName)
-        statusNotifier.broadcastDevicesChanged()
+        val device = deviceRepository.get(address) ?: return
+        val oldName = device.name
+        serverClient.postRenameDevice(oldName, newName) {
+            deviceRepository.rename(address, newName)
+            connectionManager.writeNameToDevice(device, newName)
+            statusNotifier.broadcastDevicesChanged()
+        }
     }
 
     override fun onDestroy() {

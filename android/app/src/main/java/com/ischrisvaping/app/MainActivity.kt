@@ -283,6 +283,7 @@ class MainActivity : AppCompatActivity() {
                 device.connected -> "🟢 Connected"
                 else -> "⚪ Disconnected"
             }
+            holder.renameButton.isEnabled = device.connected
             holder.renameButton.setOnClickListener { onRename(device) }
             holder.removeButton.setOnClickListener { onRemove(device) }
         }

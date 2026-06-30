@@ -71,6 +71,48 @@ class ServerClient(private val context: Context) {
         }
     }
 
+    fun postRenameDevice(oldName: String, newName: String, onSuccess: () -> Unit) {
+        httpExecutor.execute {
+            try {
+                if (serverUrl.isBlank() || authToken.isBlank()) {
+                    Log.w(TAG, "Server URL or auth token not configured, renaming locally only")
+                    mainHandler.post { onSuccess() }
+                    return@execute
+                }
+                val url = URL("$serverUrl/device/rename")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Authorization", "Bearer $authToken")
+                connection.doOutput = true
+                connection.connectTimeout = CONNECT_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
+
+                val json = JSONObject().apply {
+                    put("old_name", oldName)
+                    put("new_name", newName)
+                }.toString()
+
+                OutputStreamWriter(connection.outputStream).use { writer ->
+                    writer.write(json)
+                    writer.flush()
+                }
+
+                val responseCode = connection.responseCode
+                Log.d(TAG, "Rename response: $responseCode for $oldName -> $newName")
+                if (responseCode in 200..299) {
+                    mainHandler.post { onSuccess() }
+                } else {
+                    showToast("Rename failed: server error $responseCode")
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to post rename to server: ${e.message}")
+                showToast("Rename failed: ${e.message}")
+            }
+        }
+    }
+
     fun shutdown() {
         httpExecutor.shutdown()
     }
