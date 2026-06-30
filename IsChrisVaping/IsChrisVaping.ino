@@ -19,14 +19,14 @@ void setup() {
 
   sleepCheckWakeup();
 
+  bluetoothInit();
+  displayInit();
+  coilsInit();
+
   // Show firmware version on power-on reset
   if (esp_reset_reason() == ESP_RST_POWERON) {
     showText(FIRMWARE_VERSION);
   }
-
-  bluetoothInit();
-  displayInit();
-  coilsInit();
 
   // Reset inactivity timer
   lastActivityTime = millis();
