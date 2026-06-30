@@ -32,10 +32,7 @@ class GattConnectionManager(
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
         val OTA_SERVICE_UUID: UUID = UUID.fromString("fb1e4001-54ae-4a28-9f74-dfccb248601d")
-        val OTA_VERSION_UUID: UUID = UUID.fromString("fb1e4004-54ae-4a28-9f74-dfccb248601d")
     }
-
-    interface GattEventListener {
         fun onCharacteristicChanged(characteristic: BluetoothGattCharacteristic, value: ByteArray)
         fun onCharacteristicRead(characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int)
         fun onCharacteristicWrite(characteristic: BluetoothGattCharacteristic, status: Int)
