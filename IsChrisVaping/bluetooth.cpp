@@ -18,6 +18,20 @@ const char* MSG_COIL_A_STOPPED = "COIL_A:STOPPED";
 const char* MSG_COIL_B_STARTED = "COIL_B:STARTED";
 const char* MSG_COIL_B_STOPPED = "COIL_B:STOPPED";
 
+// Circular buffer for messages when BLE is not connected
+static char msgBuffer[MSG_BUFFER_SIZE][MSG_MAX_LEN];
+// Index of the head of the buffer (oldest message)
+static int msgBufferHead = 0;
+// Count of messages currently in the buffer
+static int msgBufferCount = 0;
+
+// Pending flush state
+bool pendingFlush = false;
+unsigned long flushAfterMs = 0;
+
+// Forward declaration
+void flushBLEBuffer();
+
 void loadVapeName() {
   prefs.begin("vape", false);  // read-write in case we need to generate a default
   String name = prefs.getString("name", "");
@@ -63,6 +77,11 @@ class MyServerCallbacks : public BLEServerCallbacks {
     deviceConnected = true;
     Serial.println("Device connected");
     BLEDevice::getAdvertising()->stop();
+    // Schedule flush after delay to allow client to subscribe to notifications
+    if (msgBufferCount > 0) {
+      pendingFlush = true;
+      flushAfterMs = millis() + FLUSH_DELAY_MS;
+    }
   }
 
   void onDisconnect(BLEServer* pServer) {
@@ -78,6 +97,40 @@ class MyServerCallbacks : public BLEServerCallbacks {
   }
 };
 
+static void bufferBLEMessage(const char* msg) {
+  int idx = (msgBufferHead + msgBufferCount) % MSG_BUFFER_SIZE;
+  if (msgBufferCount >= MSG_BUFFER_SIZE) {
+    // Buffer full - overwrite oldest
+    msgBufferHead = (msgBufferHead + 1) % MSG_BUFFER_SIZE;
+  } else {
+    msgBufferCount++;
+  }
+  strncpy(msgBuffer[idx], msg, MSG_MAX_LEN - 1);
+  msgBuffer[idx][MSG_MAX_LEN - 1] = '\0';
+  Serial.printf("Buffered message (%d in buffer): %s\n", msgBufferCount, msg);
+}
+
+void flushBLEBuffer() {
+  if (msgBufferCount == 0) return;
+  Serial.printf("Flushing %d buffered messages\n", msgBufferCount);
+  while (msgBufferCount > 0) {
+    pCharacteristic->setValue(msgBuffer[msgBufferHead]);
+    pCharacteristic->notify();
+    Serial.printf("Flushed: %s\n", msgBuffer[msgBufferHead]);
+    msgBufferHead = (msgBufferHead + 1) % MSG_BUFFER_SIZE;
+    msgBufferCount--;
+    delay(20);  // Small delay between notifications to avoid congestion
+  }
+  msgBufferHead = 0;
+}
+
+void bluetoothUpdate() {
+  if (pendingFlush && deviceConnected && millis() >= flushAfterMs) {
+    pendingFlush = false;
+    flushBLEBuffer();
+  }
+}
+
 void sendBLEMessage(const char* msg) {
   if (deviceConnected) {
     pCharacteristic->setValue(msg);
@@ -85,8 +138,7 @@ void sendBLEMessage(const char* msg) {
     Serial.print("Sent: ");
     Serial.println(msg);
   } else {
-    Serial.print("No device connected. Would send: ");
-    Serial.println(msg);
+    bufferBLEMessage(msg);
   }
 }
 
