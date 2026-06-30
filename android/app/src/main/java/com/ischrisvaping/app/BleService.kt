@@ -1,85 +1,45 @@
 package com.ischrisvaping.app
 
-import android.annotation.SuppressLint
 import android.app.*
 import android.bluetooth.*
-import android.bluetooth.le.BluetoothLeScanner
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Binder
-import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
-import android.os.ParcelUuid
-import android.util.Log
-import android.widget.Toast
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.UUID
-import java.util.concurrent.Executors
-import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 class BleService : Service() {
 
     companion object {
         private const val TAG = "BleService"
-        private const val NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "ble_service_channel"
-
-        val SERVICE_UUID: UUID = UUID.fromString("189a9192-f68f-4ac4-962e-d70e7c3755a0")
-        val CHARACTERISTIC_UUID: UUID = UUID.fromString("5cf4a205-84e1-42ad-ac23-e5adc776a992")
-        val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
-        const val ACTION_DATA_UPDATED = "com.ischrisvaping.app.DATA_UPDATED"
-        const val ACTION_STATUS_UPDATED = "com.ischrisvaping.app.STATUS_UPDATED"
-        const val ACTION_NOTIFICATION_DISMISSED = "com.ischrisvaping.app.NOTIFICATION_DISMISSED"
-        const val EXTRA_DATA = "data"
-        const val EXTRA_STATUS = "status"
     }
 
-    private var bluetoothAdapter: BluetoothAdapter? = null
-    private var bluetoothLeScanner: BluetoothLeScanner? = null
-    private var bluetoothGatt: BluetoothGatt? = null
-    private var isScanning = false
+    // Expose these for backward compatibility with MainActivity and OtaUpdateActivity
+    val devices: ConcurrentHashMap<String, VapeDevice> get() = deviceRepository.devices
+    var currentData: String = ""
+        get() = statusNotifier.currentData
+        private set
+    var currentStatus: String = "Idle"
+        get() = statusNotifier.currentStatus
+        private set
+
     var isBluetoothEnabled = true
         private set
 
-    val gatt: BluetoothGatt? get() = bluetoothGatt
+    // OTA support
+    var selectedDeviceAddress: String?
+        get() = connectionManager.selectedDeviceAddress
+        set(value) { connectionManager.selectedDeviceAddress = value }
+    val gatt: BluetoothGatt? get() = connectionManager.gatt
+    var gattEventListener: GattConnectionManager.GattEventListener?
+        get() = connectionManager.gattEventListener
+        set(value) { connectionManager.gattEventListener = value }
 
-    // Listener for OTA characteristic notifications/reads
-    interface GattEventListener {
-        fun onCharacteristicChanged(characteristic: BluetoothGattCharacteristic, value: ByteArray)
-        fun onCharacteristicRead(characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int)
-        fun onCharacteristicWrite(characteristic: BluetoothGattCharacteristic, status: Int)
-        fun onDescriptorWrite(descriptor: BluetoothGattDescriptor, status: Int)
-        fun onMtuChanged(mtu: Int)
-        fun onReadRemoteRssi(rssi: Int) {}
-    }
-    var gattEventListener: GattEventListener? = null
-
-    private val httpExecutor = Executors.newSingleThreadExecutor()
-    private val mainHandler = Handler(Looper.getMainLooper())
-
-    private var serverUrl: String = ""
-    private var authToken: String = ""
-
-    var currentData: String = ""
-        private set
-    var currentStatus: String = "Idle"
-        private set
-    var coilAActive: Boolean = false
-        private set
-    var coilBActive: Boolean = false
-        private set
-
-    private var lastPostedMessage: String = ""
-    private var lastPostedTime: Long = 0
+    private lateinit var deviceRepository: DeviceRepository
+    private lateinit var serverClient: ServerClient
+    private lateinit var stateTracker: VapeStateTracker
+    private lateinit var statusNotifier: StatusNotifier
+    private lateinit var connectionManager: GattConnectionManager
 
     private val binder = LocalBinder()
 
@@ -91,365 +51,82 @@ class BleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
 
-        val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
-        serverUrl = prefs.getString("server_url", "") ?: ""
-        authToken = prefs.getString("auth_token", "") ?: ""
+        // Initialize components
+        deviceRepository = DeviceRepository(this)
+        serverClient = ServerClient(this)
+        stateTracker = VapeStateTracker(serverClient)
+        statusNotifier = StatusNotifier(this)
+        connectionManager = GattConnectionManager(deviceRepository, stateTracker, statusNotifier)
+
+        statusNotifier.createNotificationChannel()
+        deviceRepository.load()
 
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothAdapter = bluetoothManager.adapter
-        bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner
+        connectionManager.initialize(bluetoothManager.adapter?.bluetoothLeScanner)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_NOTIFICATION_DISMISSED) {
-            // Re-post the notification when user dismisses it (only if BT is active)
+        if (intent?.action == StatusNotifier.ACTION_NOTIFICATION_DISMISSED) {
             if (isBluetoothEnabled) {
                 val notificationManager = getSystemService(NotificationManager::class.java)
-                notificationManager.notify(NOTIFICATION_ID, buildNotification(currentStatus))
+                notificationManager.notify(
+                    StatusNotifier.NOTIFICATION_ID,
+                    statusNotifier.buildNotification(statusNotifier.currentStatus)
+                )
             }
             return START_STICKY
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification("Searching for device..."), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        startForeground(
+            StatusNotifier.NOTIFICATION_ID,
+            statusNotifier.buildNotification("Searching for devices..."),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        )
+
         val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
         isBluetoothEnabled = prefs.getBoolean("bluetooth_enabled", true)
         if (isBluetoothEnabled) {
-            startScan()
+            connectionManager.startScan()
         } else {
-            updateStatus("Bluetooth disabled")
+            statusNotifier.updateStatus("Bluetooth disabled")
         }
         return START_STICKY
     }
 
-    @SuppressLint("MissingPermission")
+    // --- Public API for MainActivity ---
+
     fun setBluetoothEnabled(enabled: Boolean) {
         isBluetoothEnabled = enabled
         val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
         prefs.edit().putBoolean("bluetooth_enabled", enabled).apply()
+        connectionManager.setEnabled(enabled)
+    }
 
-        if (enabled) {
-            startScan()
-        } else {
-            // Unconditionally stop scanning regardless of isScanning state
-            bluetoothLeScanner?.stopScan(scanCallback)
-            isScanning = false
-            bluetoothGatt?.disconnect()
-            bluetoothGatt?.close()
-            bluetoothGatt = null
-            updateStatus("Bluetooth disabled")
-            updateNotification("Bluetooth disabled", ongoing = false)
+    fun addDevice(address: String, name: String) {
+        deviceRepository.add(address, name)
+        statusNotifier.broadcastDevicesChanged()
+    }
+
+    fun removeDevice(address: String) {
+        connectionManager.disconnectDevice(address)
+        deviceRepository.remove(address)
+        statusNotifier.broadcastDevicesChanged()
+    }
+
+    fun renameDevice(address: String, newName: String) {
+        val device = deviceRepository.get(address) ?: return
+        val oldName = device.name
+        serverClient.postRenameDevice(oldName, newName) {
+            deviceRepository.rename(address, newName)
+            connectionManager.writeNameToDevice(device, newName)
+            statusNotifier.broadcastDevicesChanged()
         }
     }
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "BLE Connection",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Maintains BLE connection to ESP32"
-        }
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.createNotificationChannel(channel)
-    }
-
-    private fun buildNotification(content: String, ongoing: Boolean = true): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val builder = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("IsChrisVaping")
-            .setContentText(content)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setContentIntent(pendingIntent)
-            .setOngoing(ongoing)
-
-        if (ongoing) {
-            val deleteIntent = PendingIntent.getService(
-                this, 0,
-                Intent(this, BleService::class.java).apply {
-                    action = ACTION_NOTIFICATION_DISMISSED
-                },
-                PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.setDeleteIntent(deleteIntent)
-        }
-
-        return builder.build()
-    }
-
-    private fun updateNotification(content: String, ongoing: Boolean = true) {
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.notify(NOTIFICATION_ID, buildNotification(content, ongoing))
-    }
-
-    @SuppressLint("MissingPermission")
-    fun startScan() {
-        if (!isBluetoothEnabled) return
-        if (isScanning) return
-
-        val filter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
-
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
-            .build()
-
-        updateStatus("Scanning for vape...")
-        bluetoothLeScanner?.startScan(listOf(filter), settings, scanCallback)
-        isScanning = true
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun stopScan() {
-        if (!isScanning) return
-        bluetoothLeScanner?.stopScan(scanCallback)
-        isScanning = false
-    }
-
-    private val scanCallback = object : ScanCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            Log.d(TAG, "Found device: ${result.device.name} - ${result.device.address}")
-            stopScan()
-            connectToDevice(result.device)
-        }
-
-        override fun onScanFailed(errorCode: Int) {
-            Log.e(TAG, "Scan failed: $errorCode")
-            updateStatus("Scan failed (error $errorCode)")
-            isScanning = false
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun connectToDevice(device: BluetoothDevice) {
-        updateStatus("Connecting to ${device.name ?: device.address}...")
-        bluetoothGatt = device.connectGatt(this, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
-    }
-
-    private val gattCallback = object : BluetoothGattCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> {
-                    Log.d(TAG, "Connected to GATT server")
-                    updateStatus("Connected. Discovering services...")
-                    gatt.discoverServices()
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.d(TAG, "Disconnected from GATT server")
-                    // Report both coils as stopped to the server
-                    if (coilAActive) {
-                        coilAActive = false
-                        postToServer("coil_a", "stopped")
-                    }
-                    if (coilBActive) {
-                        coilBActive = false
-                        postToServer("coil_b", "stopped")
-                    }
-                    bluetoothGatt?.close()
-                    bluetoothGatt = null
-                    if (isBluetoothEnabled) {
-                        updateStatus("Disconnected - reconnecting...")
-                        startScan()
-                    } else {
-                        updateStatus("Bluetooth disabled")
-                    }
-                }
-            }
-        }
-
-        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            gattEventListener?.onMtuChanged(mtu)
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                updateStatus("Service discovery failed")
-                return
-            }
-
-            val service = gatt.getService(SERVICE_UUID)
-            if (service == null) {
-                updateStatus("Service not found")
-                return
-            }
-
-            val characteristic = service.getCharacteristic(CHARACTERISTIC_UUID)
-            if (characteristic == null) {
-                updateStatus("Characteristic not found")
-                return
-            }
-
-            gatt.setCharacteristicNotification(characteristic, true)
-            val descriptor = characteristic.getDescriptor(CCCD_UUID)
-            if (descriptor != null) {
-                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-            }
-
-            updateStatus("Connected - listening for data")
-        }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int
-        ) {
-            gattEventListener?.onCharacteristicRead(characteristic, value, status)
-            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == CHARACTERISTIC_UUID) {
-                val text = value.toString(Charsets.UTF_8)
-                Log.d(TAG, "Read value: $text")
-                updateData(text)
-            }
-        }
-
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray
-        ) {
-            gattEventListener?.onCharacteristicChanged(characteristic, value)
-            if (characteristic.uuid == CHARACTERISTIC_UUID) {
-                val text = value.toString(Charsets.UTF_8)
-                Log.d(TAG, "Notification: $text")
-                updateData(text)
-            }
-        }
-
-        override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            gattEventListener?.onCharacteristicWrite(characteristic, status)
-        }
-
-        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-            gattEventListener?.onDescriptorWrite(descriptor, status)
-        }
-
-        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                gattEventListener?.onReadRemoteRssi(rssi)
-            }
-        }
-    }
-
-    private fun updateStatus(message: String) {
-        Log.d(TAG, "Status: $message")
-        currentStatus = message
-        updateNotification(message)
-        sendBroadcast(Intent(ACTION_STATUS_UPDATED).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_STATUS, message)
-        })
-    }
-
-    private fun updateData(data: String) {
-        currentData = data
-        parseCoilMessage(data)
-        updateNotification(getHumanReadableStatus())
-        sendBroadcast(Intent(ACTION_DATA_UPDATED).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_DATA, data)
-        })
-    }
-
-    private fun parseCoilMessage(message: String) {
-        val now = System.currentTimeMillis()
-        if (message == lastPostedMessage && (now - lastPostedTime) < 2000) {
-            Log.d(TAG, "Ignoring duplicate message: $message")
-            return
-        }
-        lastPostedMessage = message
-        lastPostedTime = now
-
-        when (message) {
-            "COIL_A:STARTED" -> {
-                coilAActive = true
-                Log.d(TAG, "Coil A started - vaping detected")
-                postToServer("coil_a", "started")
-            }
-            "COIL_A:STOPPED" -> {
-                coilAActive = false
-                Log.d(TAG, "Coil A stopped")
-                postToServer("coil_a", "stopped")
-            }
-            "COIL_B:STARTED" -> {
-                coilBActive = true
-                Log.d(TAG, "Coil B started - vaping detected")
-                postToServer("coil_b", "started")
-            }
-            "COIL_B:STOPPED" -> {
-                coilBActive = false
-                Log.d(TAG, "Coil B stopped")
-                postToServer("coil_b", "stopped")
-            }
-            else -> Log.d(TAG, "Unknown message: $message")
-        }
-    }
-
-    private fun getHumanReadableStatus(): String {
-        return when {
-            coilAActive && coilBActive -> "Chris is vaping (both coils)"
-            coilAActive -> "Chris is vaping (coil A)"
-            coilBActive -> "Chris is vaping (coil B)"
-            else -> "Not vaping"
-        }
-    }
-
-    private fun postToServer(coil: String, event: String) {
-        httpExecutor.execute {
-            try {
-                if (serverUrl.isBlank() || authToken.isBlank()) {
-                    Log.w(TAG, "Server URL or auth token not configured, skipping post")
-                    return@execute
-                }
-                val url = URL("$serverUrl/vape-update")
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.setRequestProperty("Authorization", "Bearer $authToken")
-                connection.doOutput = true
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
-
-                val json = JSONObject().apply {
-                    put("coil", coil)
-                    put("event", event)
-                    put("timestamp", System.currentTimeMillis())
-                }.toString()
-
-                OutputStreamWriter(connection.outputStream).use { writer ->
-                    writer.write(json)
-                    writer.flush()
-                }
-
-                val responseCode = connection.responseCode
-                Log.d(TAG, "Server response: $responseCode for $coil:$event")
-                if (responseCode !in 200..299) {
-                    showToast("Server error: $responseCode")
-                }
-                connection.disconnect()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to post to server: ${e.message}")
-                showToast("${e.message}")
-            }
-        }
-    }
-
-    private fun showToast(message: String) {
-        mainHandler.post {
-            Toast.makeText(this@BleService, message, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    @SuppressLint("MissingPermission")
     override fun onDestroy() {
         super.onDestroy()
-        stopScan()
-        bluetoothGatt?.disconnect()
-        bluetoothGatt?.close()
-        httpExecutor.shutdown()
+        connectionManager.disconnectAll()
+        serverClient.shutdown()
     }
 }

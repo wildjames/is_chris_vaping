@@ -16,6 +16,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,6 +30,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
     private lateinit var dataText: TextView
+    private lateinit var deviceList: RecyclerView
+    private lateinit var deviceAdapter: DeviceAdapter
 
     private var bleService: BleService? = null
     private var serviceBound = false
@@ -39,6 +46,7 @@ class MainActivity : AppCompatActivity() {
             if (!data.isNullOrEmpty()) {
                 dataText.text = data
             }
+            refreshDeviceList()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -50,13 +58,16 @@ class MainActivity : AppCompatActivity() {
     private val dataReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                BleService.ACTION_DATA_UPDATED -> {
-                    val data = intent.getStringExtra(BleService.EXTRA_DATA)
+                StatusNotifier.ACTION_DATA_UPDATED -> {
+                    val data = intent.getStringExtra(StatusNotifier.EXTRA_DATA)
                     dataText.text = data
                 }
-                BleService.ACTION_STATUS_UPDATED -> {
-                    val status = intent.getStringExtra(BleService.EXTRA_STATUS)
+                StatusNotifier.ACTION_STATUS_UPDATED -> {
+                    val status = intent.getStringExtra(StatusNotifier.EXTRA_STATUS)
                     statusText.text = status
+                }
+                StatusNotifier.ACTION_DEVICES_CHANGED -> {
+                    refreshDeviceList()
                 }
             }
         }
@@ -68,6 +79,14 @@ class MainActivity : AppCompatActivity() {
 
         statusText = findViewById(R.id.statusText)
         dataText = findViewById(R.id.dataText)
+        deviceList = findViewById(R.id.deviceList)
+
+        deviceAdapter = DeviceAdapter(
+            onRename = { device -> showRenameDialog(device) },
+            onRemove = { device -> showRemoveDialog(device) }
+        )
+        deviceList.layoutManager = LinearLayoutManager(this)
+        deviceList.adapter = deviceAdapter
 
         findViewById<Button>(R.id.settingsButton).setOnClickListener {
             showSettingsDialog()
@@ -89,6 +108,42 @@ class MainActivity : AppCompatActivity() {
         } else {
             startBleService()
         }
+    }
+
+    private fun refreshDeviceList() {
+        val devices = bleService?.devices?.values?.toList() ?: emptyList()
+        deviceAdapter.submitList(devices)
+    }
+
+    private fun showRenameDialog(device: VapeDevice) {
+        val input = EditText(this).apply {
+            setText(device.name)
+            hint = "Vape name"
+            setPadding(48, 32, 48, 16)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Rename Vape")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotEmpty()) {
+                    bleService?.renameDevice(device.address, newName)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showRemoveDialog(device: VapeDevice) {
+        AlertDialog.Builder(this)
+            .setTitle("Remove Vape")
+            .setMessage("Remove '${device.name}' from your devices?")
+            .setPositiveButton("Remove") { _, _ ->
+                bleService?.removeDevice(device.address)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun checkPermissions(): Boolean {
@@ -173,8 +228,9 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         val filter = IntentFilter().apply {
-            addAction(BleService.ACTION_DATA_UPDATED)
-            addAction(BleService.ACTION_STATUS_UPDATED)
+            addAction(StatusNotifier.ACTION_DATA_UPDATED)
+            addAction(StatusNotifier.ACTION_STATUS_UPDATED)
+            addAction(StatusNotifier.ACTION_DEVICES_CHANGED)
         }
         registerReceiver(dataReceiver, filter, RECEIVER_NOT_EXPORTED)
     }
@@ -190,5 +246,48 @@ class MainActivity : AppCompatActivity() {
             unbindService(serviceConnection)
             serviceBound = false
         }
+    }
+
+    // --- RecyclerView Adapter for device list ---
+
+    inner class DeviceAdapter(
+        private val onRename: (VapeDevice) -> Unit,
+        private val onRemove: (VapeDevice) -> Unit
+    ) : RecyclerView.Adapter<DeviceAdapter.ViewHolder>() {
+
+        private var items: List<VapeDevice> = emptyList()
+
+        fun submitList(newItems: List<VapeDevice>) {
+            items = newItems.toList()
+            notifyDataSetChanged()
+        }
+
+        inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val nameText: TextView = view.findViewById(R.id.deviceName)
+            val statusText: TextView = view.findViewById(R.id.deviceStatus)
+            val renameButton: Button = view.findViewById(R.id.renameButton)
+            val removeButton: Button = view.findViewById(R.id.removeButton)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_device, parent, false)
+            return ViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val device = items[position]
+            holder.nameText.text = device.name
+            holder.statusText.text = when {
+                device.coilAActive || device.coilBActive -> "🔴 Vaping"
+                device.connected -> "🟢 Connected"
+                else -> "⚪ Disconnected"
+            }
+            holder.renameButton.isEnabled = device.connected
+            holder.renameButton.setOnClickListener { onRename(device) }
+            holder.removeButton.setOnClickListener { onRemove(device) }
+        }
+
+        override fun getItemCount() = items.size
     }
 }
