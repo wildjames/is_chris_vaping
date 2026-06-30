@@ -8,5 +8,6 @@ data class VapeDevice(
     var gatt: BluetoothGatt? = null,
     var coilAActive: Boolean = false,
     var coilBActive: Boolean = false,
-    var connected: Boolean = false
+    var connected: Boolean = false,
+    var firmwareVersion: String? = null
 )
