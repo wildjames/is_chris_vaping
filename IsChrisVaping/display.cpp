@@ -76,8 +76,8 @@ void drawVapeName() {
   int16_t x = 2;
   int16_t y = 170 - nameCharH - 2;
 
-  // Clear the bottom-left area
-  tft.fillRect(0, y - 1, strlen(vapeName) * nameCharW + 4, nameCharH + 3, ST77XX_BLACK);
+  // Clear the full width of the name area to avoid leftover characters
+  tft.fillRect(0, y - 1, MAX_VAPE_NAME_LEN * nameCharW + 4, nameCharH + 3, ST77XX_BLACK);
 
   tft.setTextSize(nameSize);
   tft.setTextColor(ST77XX_WHITE);

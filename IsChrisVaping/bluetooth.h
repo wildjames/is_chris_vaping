@@ -24,6 +24,7 @@ extern bool previousConnected;
 
 // Device name stored in flash
 extern char vapeName[MAX_VAPE_NAME_LEN + 1];
+extern bool nameChanged;
 
 // BLE message definitions
 extern const char* MSG_COIL_A_STARTED;

@@ -9,6 +9,7 @@ bool deviceConnected = false;
 bool previousConnected = false;
 
 char vapeName[MAX_VAPE_NAME_LEN + 1] = DEFAULT_VAPE_NAME;
+bool nameChanged = false;
 
 static Preferences prefs;
 
@@ -33,6 +34,7 @@ void saveVapeName(const char* name) {
   prefs.putString("name", vapeName);
   prefs.end();
   Serial.printf("Saved vape name: %s\n", vapeName);
+  nameChanged = true;
 }
 
 class NameCharacteristicCallbacks : public BLECharacteristicCallbacks {
