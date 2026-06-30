@@ -216,24 +216,33 @@ def device_rename():
     old_name = data.get("old_name")
     new_name = data.get("new_name")
 
-    if not old_name or not new_name:
-        return jsonify({"error": "old_name and new_name are required"}), 400
+    if not new_name:
+        return jsonify({"error": "new_name is required"}), 400
 
     # Rename in MariaDB (source of truth)
     session = Session()
     try:
-        device = session.execute(
-            select(Device).where(Device.name == old_name)
-        ).scalar_one_or_none()
+        device = None
+        if old_name:
+            device = session.execute(
+                select(Device).where(Device.name == old_name)
+            ).scalar_one_or_none()
 
         if device is None:
-            return jsonify({"error": f"Device '{old_name}' not found"}), 404
+            # Device doesn't exist yet - create it with the new name
+            device = Device(name=new_name)
+            session.add(device)
+            session.commit()
 
-        existing = session.execute(
-            select(Device).where(Device.name == new_name)
-        ).scalar_one_or_none()
-        if existing is not None:
-            return jsonify({"error": f"Device '{new_name}' already exists"}), 409
+            cache_set_device(new_name, {
+                "coil_a": False,
+                "coil_b": False,
+                "last_event": None,
+                "last_updated": None,
+            })
+
+            app.logger.info("Device created via rename: %s", new_name)
+            return jsonify({"status": "ok", "old_name": old_name, "new_name": new_name, "created": True}), 200
 
         device.name = new_name
         session.execute(
@@ -246,8 +255,11 @@ def device_rename():
         session.close()
 
     # Update Redis cache
-    state = cache_get_device(old_name)
-    cache_delete_device(old_name)
+    if old_name:
+        state = cache_get_device(old_name)
+        cache_delete_device(old_name)
+    else:
+        state = None
     if state:
         cache_set_device(new_name, state)
 

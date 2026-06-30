@@ -57,7 +57,7 @@ jobs:
             PATCH) PATCH=$((PATCH + 1)) ;;
           esac
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          sed -i "s/<version>/$NEW_VERSION/" IsChrisVaping/version.h
+          sed -i "s/<dev>/$NEW_VERSION/" IsChrisVaping/version.h
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install arduino-cli
