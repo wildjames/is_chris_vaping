@@ -11,7 +11,7 @@ jobs:
     if: github.event.pull_request.merged == true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Determine version bump
         id: bump
@@ -58,6 +58,7 @@ jobs:
         run: |
           arduino-cli compile \
             --fqbn "esp32:esp32:esp32:CPUFreq=80,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,EraseFlash=none" \
+            --output-dir IsChrisVaping/build \
             IsChrisVaping
 
       - name: Upload firmware to server
@@ -65,4 +66,4 @@ jobs:
           curl -f -X POST \
             "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
-            -F "file=@IsChrisVaping/build/esp32.esp32.esp32/IsChrisVaping.ino.bin;type=application/octet-stream"
+            -F "file=@IsChrisVaping/build/IsChrisVaping.ino.bin;type=application/octet-stream"
