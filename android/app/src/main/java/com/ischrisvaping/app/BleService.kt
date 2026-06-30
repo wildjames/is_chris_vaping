@@ -117,11 +117,20 @@ class BleService : Service() {
     fun renameDevice(address: String, newName: String) {
         val device = deviceRepository.get(address) ?: return
         val oldName = device.name
-        serverClient.postRenameDevice(oldName, newName) {
+        val sendOldName = !oldName.matches(Regex("""My Vape \d{4}"""))
+        serverClient.postRenameDevice(if (sendOldName) oldName else null, newName) {
             deviceRepository.rename(address, newName)
             connectionManager.writeNameToDevice(device, newName)
             statusNotifier.broadcastDevicesChanged()
         }
+    }
+
+    fun resetDeviceName(address: String) {
+        val device = deviceRepository.get(address) ?: return
+        val newName = "My Vape %04d".format((0..9999).random())
+        deviceRepository.rename(address, newName)
+        connectionManager.writeNameToDevice(device, newName)
+        statusNotifier.broadcastDevicesChanged()
     }
 
     override fun onDestroy() {

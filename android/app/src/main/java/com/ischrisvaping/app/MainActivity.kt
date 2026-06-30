@@ -179,41 +179,8 @@ class MainActivity : AppCompatActivity() {
                     bleService?.renameDevice(device.address, newName)
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showRemoveDialog(device: VapeDevice) {
-        AlertDialog.Builder(this)
-            .setTitle("Remove Vape")
-            .setMessage("Remove '${device.name}' from your devices?")
-            .setPositiveButton("Remove") { _, _ ->
-                bleService?.removeDevice(device.address)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun refreshDeviceList() {
-        val devices = bleService?.devices?.values?.toList() ?: emptyList()
-        deviceAdapter.submitList(devices)
-    }
-
-    private fun showRenameDialog(device: VapeDevice) {
-        val input = EditText(this).apply {
-            setText(device.name)
-            hint = "Vape name"
-            setPadding(48, 32, 48, 16)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Rename Vape")
-            .setView(input)
-            .setPositiveButton("Save") { _, _ ->
-                val newName = input.text.toString().trim()
-                if (newName.isNotEmpty()) {
-                    bleService?.renameDevice(device.address, newName)
-                }
+            .setNeutralButton("Reset") { _, _ ->
+                bleService?.resetDeviceName(device.address)
             }
             .setNegativeButton("Cancel", null)
             .show()

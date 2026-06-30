@@ -71,7 +71,7 @@ class ServerClient(private val context: Context) {
         }
     }
 
-    fun postRenameDevice(oldName: String, newName: String, onSuccess: () -> Unit) {
+    fun postRenameDevice(oldName: String?, newName: String, onSuccess: () -> Unit) {
         httpExecutor.execute {
             try {
                 if (serverUrl.isBlank() || authToken.isBlank()) {
@@ -89,7 +89,7 @@ class ServerClient(private val context: Context) {
                 connection.readTimeout = READ_TIMEOUT_MS
 
                 val json = JSONObject().apply {
-                    put("old_name", oldName)
+                    if (oldName != null) put("old_name", oldName)
                     put("new_name", newName)
                 }.toString()
 
