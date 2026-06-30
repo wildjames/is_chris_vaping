@@ -71,6 +71,11 @@ void loop() {
     drawBtIcon();
   }
 
+  if (nameChanged) {
+    nameChanged = false;
+    drawVapeName();
+  }
+
   // --- Sleep after inactivity ---
   sleepUpdate();
 
