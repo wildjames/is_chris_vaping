@@ -1,0 +1,20 @@
+name: Validate PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title prefix
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if [[ "$TITLE" =~ ^(MAJOR|MINOR|PATCH) ]]; then
+            echo "Valid PR title: $TITLE"
+          else
+            echo "::error::PR title must start with MAJOR, MINOR, or PATCH. Got: $TITLE"
+            exit 1
+          fi
