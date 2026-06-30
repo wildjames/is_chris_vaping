@@ -32,26 +32,50 @@ redis_client = redis.Redis(
     decode_responses=True,
 )
 
-VAPE_STATE_KEY = "vape_state"
+# Redis key that holds a set of all known device names
+DEVICE_LIST_KEY = "devices"
+# Per-device state stored at "device:{name}"
+DEVICE_KEY_PREFIX = "device:"
+
 REDIS_FIRMWARE_VERSION_KEY = "firmware:version"
 REDIS_FIRMWARE_SIZE_KEY = "firmware:size"
 REDIS_FIRMWARE_UPLOADED_AT_KEY = "firmware:uploaded_at"
 
 
-def get_vape_state():
-    raw = redis_client.get(VAPE_STATE_KEY)
+def device_key(name):
+    return f"{DEVICE_KEY_PREFIX}{name}"
+
+
+def get_device_state(name):
+    raw = redis_client.get(device_key(name))
     if raw:
         return json.loads(raw)
-    return {
-        "coil_a": False,
-        "coil_b": False,
-        "last_event": None,
-        "last_updated": None,
-    }
+    return {"coil_a": False, "coil_b": False, "last_event": None, "last_updated": None}
 
 
-def set_vape_state(state):
-    redis_client.set(VAPE_STATE_KEY, json.dumps(state))
+def set_device_state(name, state):
+    redis_client.set(device_key(name), json.dumps(state))
+    redis_client.sadd(DEVICE_LIST_KEY, name)
+
+
+def get_all_device_names():
+    return redis_client.smembers(DEVICE_LIST_KEY)
+
+
+def get_all_devices():
+    names = get_all_device_names()
+    devices = {}
+    for name in names:
+        devices[name] = get_device_state(name)
+    return devices
+
+
+def rename_device(old_name, new_name):
+    """Rename a device: move its state to a new key and update the device list."""
+    state = get_device_state(old_name)
+    redis_client.delete(device_key(old_name))
+    redis_client.srem(DEVICE_LIST_KEY, old_name)
+    set_device_state(new_name, state)
 
 
 def require_token(f):
@@ -73,35 +97,62 @@ def vape_update():
 
     coil = data.get("coil")
     event = data.get("event")
+    vape_name = data.get("vape_name", "default")
 
     if coil not in ("coil_a", "coil_b"):
         return jsonify({"error": "Invalid coil, must be coil_a or coil_b"}), 400
     if event not in ("started", "stopped"):
         return jsonify({"error": "Invalid event, must be started or stopped"}), 400
 
-    vape_state = get_vape_state()
-    vape_state[coil] = event == "started"
-    vape_state["last_event"] = f"{coil}:{event}"
-    vape_state["last_updated"] = datetime.now(timezone.utc).isoformat()
-    set_vape_state(vape_state)
+    # Update per-device state
+    state = get_device_state(vape_name)
+    state[coil] = event == "started"
+    state["last_event"] = f"{coil}:{event}"
+    state["last_updated"] = datetime.now(timezone.utc).isoformat()
+    set_device_state(vape_name, state)
 
-    is_vaping = vape_state["coil_a"] or vape_state["coil_b"]
+    devices = get_all_devices()
+    is_vaping = any(d.get("coil_a", False) or d.get("coil_b", False) for d in devices.values())
     app.logger.info(
-        "Vape update: %s %s | vaping=%s", coil, event, is_vaping
+        "Vape update: %s %s %s | vaping=%s", vape_name, coil, event, is_vaping
     )
 
-    return jsonify({"status": "ok", "is_vaping": is_vaping, "state": vape_state}), 200
+    return jsonify({"status": "ok", "is_vaping": is_vaping, "device": state, "devices": devices}), 200
+
+
+@app.route("/device/rename", methods=["POST"])
+@require_token
+def device_rename():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    old_name = data.get("old_name")
+    new_name = data.get("new_name")
+
+    if not old_name or not new_name:
+        return jsonify({"error": "old_name and new_name are required"}), 400
+
+    if old_name not in get_all_device_names():
+        return jsonify({"error": f"Device '{old_name}' not found"}), 404
+
+    if new_name in get_all_device_names():
+        return jsonify({"error": f"Device '{new_name}' already exists"}), 409
+
+    rename_device(old_name, new_name)
+    app.logger.info("Device renamed: %s -> %s", old_name, new_name)
+    return jsonify({"status": "ok", "old_name": old_name, "new_name": new_name}), 200
 
 
 @app.route("/vape-status", methods=["GET"])
 def vape_status():
     try:
-        vape_state = get_vape_state()
-        is_vaping = vape_state["coil_a"] or vape_state["coil_b"]
-        return jsonify({"is_vaping": is_vaping, "state": vape_state}), 200
+        devices = get_all_devices()
+        is_vaping = any(d.get("coil_a", False) or d.get("coil_b", False) for d in devices.values())
+        return jsonify({"is_vaping": is_vaping, "devices": devices}), 200
     except Exception as e:
         app.logger.exception("Error retrieving vape status: %s", e)
-        return {"is_vaping": False, "state": get_vape_state()}, 200
+        return jsonify({"is_vaping": False, "devices": {}}), 200
 
 @app.route("/health", methods=["GET"])
 def health():

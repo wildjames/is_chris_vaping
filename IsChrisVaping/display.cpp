@@ -65,4 +65,22 @@ void showText(const char* text) {
   }
 
   drawBtIcon();
+  drawVapeName();
+}
+
+void drawVapeName() {
+  // Draw the vape name in small font at bottom-left
+  uint8_t nameSize = 1;
+  uint8_t nameCharW = 6 * nameSize;
+  uint8_t nameCharH = 8 * nameSize;
+  int16_t x = 2;
+  int16_t y = 170 - nameCharH - 2;
+
+  // Clear the bottom-left area
+  tft.fillRect(0, y - 1, strlen(vapeName) * nameCharW + 4, nameCharH + 3, ST77XX_BLACK);
+
+  tft.setTextSize(nameSize);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setCursor(x, y);
+  tft.print(vapeName);
 }

@@ -1,15 +1,49 @@
 #include "bluetooth.h"
 #include "ota.h"
+#include <Preferences.h>
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
+BLECharacteristic* pNameCharacteristic = NULL;
 bool deviceConnected = false;
 bool previousConnected = false;
+
+char vapeName[MAX_VAPE_NAME_LEN + 1] = DEFAULT_VAPE_NAME;
+
+static Preferences prefs;
 
 const char* MSG_COIL_A_STARTED = "COIL_A:STARTED";
 const char* MSG_COIL_A_STOPPED = "COIL_A:STOPPED";
 const char* MSG_COIL_B_STARTED = "COIL_B:STARTED";
 const char* MSG_COIL_B_STOPPED = "COIL_B:STOPPED";
+
+void loadVapeName() {
+  prefs.begin("vape", true);  // read-only
+  String name = prefs.getString("name", DEFAULT_VAPE_NAME);
+  prefs.end();
+  strncpy(vapeName, name.c_str(), MAX_VAPE_NAME_LEN);
+  vapeName[MAX_VAPE_NAME_LEN] = '\0';
+  Serial.printf("Loaded vape name: %s\n", vapeName);
+}
+
+void saveVapeName(const char* name) {
+  strncpy(vapeName, name, MAX_VAPE_NAME_LEN);
+  vapeName[MAX_VAPE_NAME_LEN] = '\0';
+  prefs.begin("vape", false);  // read-write
+  prefs.putString("name", vapeName);
+  prefs.end();
+  Serial.printf("Saved vape name: %s\n", vapeName);
+}
+
+class NameCharacteristicCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pChar) {
+    String value = pChar->getValue();
+    if (value.length() > 0 && value.length() <= MAX_VAPE_NAME_LEN) {
+      saveVapeName(value.c_str());
+      Serial.printf("Name updated via BLE: %s\n", vapeName);
+    }
+  }
+};
 
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
@@ -46,6 +80,9 @@ void sendBLEMessage(const char* msg) {
 void bluetoothInit() {
   Serial.println("Starting BLE...");
 
+  // Load the device name from flash
+  loadVapeName();
+
   BLEDevice::init("IsChrisVaping");
 
   // Create BLE Server
@@ -54,9 +91,9 @@ void bluetoothInit() {
   pServer->setCallbacks(&serverCallbacks);
 
   // Create BLE Service
-  BLEService* pService = pServer->createService(SERVICE_UUID);
+  BLEService* pService = pServer->createService(BLEUUID(SERVICE_UUID), 20);
 
-  // Create BLE Characteristic with notify property
+  // Create BLE Characteristic with notify property (coil data)
   pCharacteristic = pService->createCharacteristic(
     CHARACTERISTIC_UUID,
     BLECharacteristic::PROPERTY_READ |
@@ -64,6 +101,16 @@ void bluetoothInit() {
   );
   pCharacteristic->addDescriptor(new BLE2902());
   pCharacteristic->setValue("READY");
+
+  // Create Name Characteristic (read + write)
+  static NameCharacteristicCallbacks nameCallbacks;
+  pNameCharacteristic = pService->createCharacteristic(
+    NAME_CHARACTERISTIC_UUID,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_WRITE
+  );
+  pNameCharacteristic->setCallbacks(&nameCallbacks);
+  pNameCharacteristic->setValue(vapeName);
 
   // Start the service
   pService->start();
