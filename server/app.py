@@ -1,16 +1,17 @@
+import atexit
 import json
 import logging
 import os
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 
 import redis
 from flask import Flask, jsonify, request, send_file, send_from_directory
-from sqlalchemy import select
-
 from models import Device, Firmware, VapeEvent, init_db
+from sqlalchemy import select, update
+from sqlalchemy.engine import URL
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
@@ -33,6 +34,9 @@ SITE_DIR = Path(__file__).resolve().parent / "site"
 app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="")
 logging.basicConfig(level=logging.INFO)
 
+_db_executor = ThreadPoolExecutor(max_workers=2)
+atexit.register(_db_executor.shutdown, wait=True)
+
 if not AUTH_TOKEN:
     raise RuntimeError("VAPE_API_TOKEN environment variable must be set")
 
@@ -50,7 +54,14 @@ DEVICE_LIST_KEY = f"{REDIS_KEY}:devices"
 DEVICE_KEY_PREFIX = f"{REDIS_KEY}:device:"
 
 # --- MariaDB (persistent) ---
-DB_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DB_URL = URL.create(
+    drivername="mysql+pymysql",
+    username=DB_USER,
+    password=DB_PASSWORD,
+    host=DB_HOST,
+    port=int(DB_PORT),
+    database=DB_NAME,
+)
 engine, Session = init_db(DB_URL)
 
 
@@ -83,6 +94,9 @@ def cache_get_all_devices():
         state = cache_get_device(name)
         if state:
             devices[name] = state
+        else:
+            # Per-device key evicted/missing - repopulate entire cache from DB
+            return db_get_all_devices_and_warm_cache()
     return devices
 
 
@@ -180,12 +194,8 @@ def vape_update():
     state["last_updated"] = now.isoformat()
     cache_set_device(vape_name, state)
 
-    # Persist to MariaDB in background thread
-    threading.Thread(
-        target=db_persist_vape_update,
-        args=(vape_name, coil, event, state, now),
-        daemon=True,
-    ).start()
+    # Persist to MariaDB via bounded worker pool
+    _db_executor.submit(db_persist_vape_update, vape_name, coil, event, state, now)
 
     devices = cache_get_all_devices()
     is_vaping = any(d.get("coil_a", False) or d.get("coil_b", False) for d in devices.values())
@@ -226,6 +236,11 @@ def device_rename():
             return jsonify({"error": f"Device '{new_name}' already exists"}), 409
 
         device.name = new_name
+        session.execute(
+            update(VapeEvent)
+            .where(VapeEvent.device_name == old_name)
+            .values(device_name=new_name)
+        )
         session.commit()
     finally:
         session.close()
