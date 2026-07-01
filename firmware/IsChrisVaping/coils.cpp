@@ -54,6 +54,7 @@ void coilsUpdate() {
         c.lowStart = millis();
       } else if (millis() - c.lowStart >= COIL_DEBOUNCE_MS) {
         // Coil has been LOW for COIL_DEBOUNCE_MS, consider it stopped
+        // TODO: The STOPPED BLE packet should contain the duration of the coil activity, and that should be passed along to the server.
         Serial.println(String(c.name) + " inactive");
         c.active = false;
         c.lowTiming = false;
