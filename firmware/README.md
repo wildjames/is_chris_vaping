@@ -33,6 +33,13 @@ $env:IDF_COMPONENT_MANAGER = "0"
 pio run -e esp32 -t upload
 ```
 
+For the 4MB dev kit (no external 32kHz crystal):
+
+```powershell
+$env:IDF_COMPONENT_MANAGER = "0"
+pio run -e esp32_4mb -t upload
+```
+
 The board is configured to upload via COM10. Change `upload_port` in `platformio.ini` if your board is on a different port.
 
 To see what COM port your board is on, run:
