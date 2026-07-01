@@ -7,8 +7,8 @@ extern unsigned long lastActivityTime;
 extern bool notRippedTimerActive;
 extern unsigned long notRippedTimerStart;
 
-// Debounce: require 100ms of continuous LOW before counting as stopped
-#define COIL_DEBOUNCE_MS 100
+// Debounce: require continuous LOW before counting as stopped
+#define COIL_DEBOUNCE_MS 500
 
 struct CoilState {
   uint8_t pin;
