@@ -1,0 +1,36 @@
+# Power Management - enables esp_pm_configure() and automatic light sleep
+CONFIG_PM_ENABLE=y
+
+# FreeRTOS Tickless Idle - allows FreeRTOS to enter light sleep when idle
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+CONFIG_FREERTOS_IDLE_TIME_BEFORE_SLEEP=3
+
+# Arduino ESP32 requires 1000Hz tick rate
+CONFIG_FREERTOS_HZ=1000
+
+# CPU frequency 80MHz
+CONFIG_ESP32_DEFAULT_CPU_FREQ_80=y
+# CONFIG_ESP32_DEFAULT_CPU_FREQ_160 is not set
+# CONFIG_ESP32_DEFAULT_CPU_FREQ_240 is not set
+
+# Flash size
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# RTC clock source: external 32.768kHz crystal
+# Required for BLE modem sleep during light sleep
+CONFIG_RTC_CLK_SRC_EXT_CRYS=y
+# CONFIG_RTC_CLK_SRC_INT_RC is not set
+
+# BT controller modem sleep with external 32K crystal as low-power clock
+# This allows BLE to maintain connections during automatic light sleep
+CONFIG_BTDM_CTRL_MODEM_SLEEP=y
+CONFIG_BTDM_CTRL_MODEM_SLEEP_MODE_ORIG=y
+# CONFIG_BTDM_CTRL_LPCLK_SEL_MAIN_XTAL is not set
+CONFIG_BTDM_CTRL_LPCLK_SEL_EXT_32K_XTAL=y
+
+# BLE only mode (no classic BT needed)
+CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
+# CONFIG_BTDM_CTRL_MODE_BTDM is not set
+# CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY is not set
