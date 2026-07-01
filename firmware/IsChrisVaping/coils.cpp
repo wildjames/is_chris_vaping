@@ -8,7 +8,7 @@ extern bool notRippedTimerActive;
 extern unsigned long notRippedTimerStart;
 
 // Debounce: require continuous LOW before counting as stopped
-#define COIL_DEBOUNCE_MS 500
+constexpr unsigned long COIL_DEBOUNCE_MS 500
 
 struct CoilState {
   uint8_t pin;
@@ -43,7 +43,7 @@ void coilsUpdate() {
       if (!c.active) {
         c.active = true;
         lastActivityTime = millis();
-        Serial.println(String(c.name) + " active");
+        Serial.printf("%s active\n", c.name);
         c.onStarted();
       }
 
@@ -55,7 +55,7 @@ void coilsUpdate() {
       } else if (millis() - c.lowStart >= COIL_DEBOUNCE_MS) {
         // Coil has been LOW for COIL_DEBOUNCE_MS, consider it stopped
         // TODO: The STOPPED BLE packet should contain the duration of the coil activity, and that should be passed along to the server.
-        Serial.println(String(c.name) + " inactive");
+        Serial.printf("%s inactive\n", c.name);
         c.active = false;
         c.lowTiming = false;
         lastActivityTime = millis();
