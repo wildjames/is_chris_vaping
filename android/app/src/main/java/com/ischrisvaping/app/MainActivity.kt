@@ -35,14 +35,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var statusText: TextView
-    private lateinit var dataText: TextView
     private lateinit var deviceList: RecyclerView
     private lateinit var deviceAdapter: DeviceAdapter
 
     private var bleService: BleService? = null
     private var serviceBound = false
-    private var serverFirmwareVersion: String? = null
+    private val serverFirmwareVersions: MutableMap<String, String> = mutableMapOf()
     private val executor = Executors.newSingleThreadExecutor()
+    private val versionPollHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val versionPollRunnable = object : Runnable {
+        override fun run() {
+            fetchServerFirmwareVersions()
+            versionPollHandler.postDelayed(this, 60_000L)
+        }
+    }
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -50,10 +56,6 @@ class MainActivity : AppCompatActivity() {
             bleService = binder.getService()
             serviceBound = true
             statusText.text = bleService?.currentStatus ?: "Connected to service"
-            val data = bleService?.currentData
-            if (!data.isNullOrEmpty()) {
-                dataText.text = data
-            }
             refreshDeviceList()
         }
 
@@ -67,8 +69,7 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 StatusNotifier.ACTION_DATA_UPDATED -> {
-                    val data = intent.getStringExtra(StatusNotifier.EXTRA_DATA)
-                    dataText.text = data
+                    refreshDeviceList()
                 }
                 StatusNotifier.ACTION_STATUS_UPDATED -> {
                     val status = intent.getStringExtra(StatusNotifier.EXTRA_STATUS)
@@ -76,6 +77,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 StatusNotifier.ACTION_DEVICES_CHANGED -> {
                     refreshDeviceList()
+                    fetchServerFirmwareVersions()
                 }
             }
         }
@@ -86,14 +88,13 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         statusText = findViewById(R.id.statusText)
-        dataText = findViewById(R.id.dataText)
         deviceList = findViewById(R.id.deviceList)
 
         deviceAdapter = DeviceAdapter(
             onRename = { device -> showRenameDialog(device) },
             onRemove = { device -> showRemoveDialog(device) },
             onUpdate = { device -> launchOtaUpdate(device) },
-            serverFirmwareVersion = { serverFirmwareVersion }
+            serverFirmwareVersions = { serverFirmwareVersions }
         )
         deviceList.layoutManager = LinearLayoutManager(this)
         deviceList.adapter = deviceAdapter
@@ -115,7 +116,8 @@ class MainActivity : AppCompatActivity() {
             startBleService()
         }
 
-        fetchServerFirmwareVersion()
+        fetchServerFirmwareVersions()
+        versionPollHandler.postDelayed(versionPollRunnable, 60_000L)
     }
 
     private fun refreshDeviceList() {
@@ -129,7 +131,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun fetchServerFirmwareVersion() {
+    private fun fetchServerFirmwareVersions() {
         executor.execute {
             try {
                 val prefs = getSharedPreferences("vape_config", MODE_PRIVATE)
@@ -141,24 +143,37 @@ class MainActivity : AppCompatActivity() {
                     "${parsed.protocol}://${parsed.host}${if (parsed.port != -1 && parsed.port != parsed.defaultPort) ":${parsed.port}" else ""}"
                 } catch (_: Exception) { return@execute }
 
-                val url = URL("$baseUrl/firmware/latest")
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
+                // Fetch firmware version for each known variant
+                val variants = bleService?.devices?.values
+                    ?.mapNotNull { it.boardVariant }
+                    ?.distinct()
+                    ?.ifEmpty { listOf("esp32") }
+                    ?: listOf("esp32")
 
-                if (connection.responseCode == 200) {
-                    val body = connection.inputStream.bufferedReader().readText()
-                    val json = JSONObject(body)
-                    val version = json.getString("version")
-                    runOnUiThread {
-                        serverFirmwareVersion = version
-                        refreshDeviceList()
+                for (variant in variants) {
+                    try {
+                        val url = URL("$baseUrl/firmware/latest?variant=$variant")
+                        val connection = url.openConnection() as HttpURLConnection
+                        connection.requestMethod = "GET"
+                        connection.connectTimeout = 10000
+                        connection.readTimeout = 10000
+
+                        if (connection.responseCode == 200) {
+                            val body = connection.inputStream.bufferedReader().readText()
+                            val json = JSONObject(body)
+                            val version = json.getString("version")
+                            synchronized(serverFirmwareVersions) {
+                                serverFirmwareVersions[variant] = version
+                            }
+                        }
+                        connection.disconnect()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to fetch server firmware version for variant $variant", e)
                     }
                 }
-                connection.disconnect()
+                runOnUiThread { refreshDeviceList() }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch server firmware version", e)
+                Log.e(TAG, "Failed to fetch server firmware versions", e)
             }
         }
     }
@@ -293,6 +308,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        versionPollHandler.removeCallbacks(versionPollRunnable)
         if (serviceBound) {
             unbindService(serviceConnection)
             serviceBound = false
@@ -305,7 +321,7 @@ class MainActivity : AppCompatActivity() {
         private val onRename: (VapeDevice) -> Unit,
         private val onRemove: (VapeDevice) -> Unit,
         private val onUpdate: (VapeDevice) -> Unit,
-        private val serverFirmwareVersion: () -> String?
+        private val serverFirmwareVersions: () -> Map<String, String>
     ) : RecyclerView.Adapter<DeviceAdapter.ViewHolder>() {
 
         private var items: List<VapeDevice> = emptyList()
@@ -317,7 +333,9 @@ class MainActivity : AppCompatActivity() {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val nameText: TextView = view.findViewById(R.id.deviceName)
+            val vapingIndicator: TextView = view.findViewById(R.id.vapingIndicator)
             val statusText: TextView = view.findViewById(R.id.deviceStatus)
+            val versionText: TextView = view.findViewById(R.id.deviceVersion)
             val renameButton: Button = view.findViewById(R.id.renameButton)
             val updateButton: Button = view.findViewById(R.id.updateButton)
             val removeButton: Button = view.findViewById(R.id.removeButton)
@@ -332,8 +350,14 @@ class MainActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val device = items[position]
             holder.nameText.text = device.name
+            if (device.coilAActive || device.coilBActive) {
+                holder.vapingIndicator.text = "🔴 VAPING"
+                holder.vapingIndicator.setTextColor(android.graphics.Color.RED)
+                holder.vapingIndicator.visibility = View.VISIBLE
+            } else {
+                holder.vapingIndicator.visibility = View.GONE
+            }
             holder.statusText.text = when {
-                device.coilAActive || device.coilBActive -> "🔴 Vaping"
                 device.connected -> "🟢 Connected"
                 else -> "⚪ Disconnected"
             }
@@ -341,10 +365,23 @@ class MainActivity : AppCompatActivity() {
             holder.renameButton.setOnClickListener { onRename(device) }
             holder.removeButton.setOnClickListener { onRemove(device) }
 
+            // Show firmware version info
+            val deviceVer = device.firmwareVersion
+            val variant = device.boardVariant ?: "esp32"
+            val serverVer = serverFirmwareVersions()[variant]
+            if (deviceVer != null) {
+                val versionInfo = buildString {
+                    append("FW: v$deviceVer")
+                    if (serverVer != null) append(" · Server: v$serverVer")
+                }
+                holder.versionText.text = versionInfo
+                holder.versionText.visibility = View.VISIBLE
+            } else {
+                holder.versionText.visibility = View.GONE
+            }
+
             // Show update button only if device is connected, has a firmware version,
             // and that version differs from the server's latest
-            val serverVer = serverFirmwareVersion()
-            val deviceVer = device.firmwareVersion
             val updateAvailable = device.connected && deviceVer != null && serverVer != null && deviceVer != serverVer
             holder.updateButton.visibility = if (updateAvailable) View.VISIBLE else View.GONE
             holder.updateButton.setOnClickListener { onUpdate(device) }
