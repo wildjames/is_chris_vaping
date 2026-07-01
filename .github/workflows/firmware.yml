@@ -14,13 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Check for Arduino code changes
+      - name: Check for firmware code changes
         id: filter
         uses: dorny/paths-filter@v3
         with:
           filters: |
             firmware:
-              - 'IsChrisVaping/**'
+              - 'firmware/**'
 
   build-and-upload:
     runs-on: ubuntu-latest
@@ -57,30 +57,26 @@ jobs:
             PATCH) PATCH=$((PATCH + 1)) ;;
           esac
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          sed -i "s/<dev>/$NEW_VERSION/" IsChrisVaping/version.h
+          sed -i "s/<dev>/$NEW_VERSION/" firmware/IsChrisVaping/version.h
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Install arduino-cli
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
-          echo "$PWD/bin" >> $GITHUB_PATH
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Install ESP32 core and libraries
-        run: |
-          arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-          arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-          arduino-cli lib install "Adafruit GFX Library" "Adafruit ST7735 and ST7789 Library"
+      - name: Install PlatformIO
+        run: pip install platformio
 
-      - name: Compile firmware
-        run: |
-          arduino-cli compile \
-            --fqbn "esp32:esp32:esp32:CPUFreq=80,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,EraseFlash=none" \
-            --output-dir IsChrisVaping/build \
-            IsChrisVaping
+      - name: Build firmware
+        working-directory: firmware
+        env:
+          IDF_COMPONENT_MANAGER: "0"
+        run: pio run -e esp32
 
       - name: Upload firmware to server
         run: |
           curl -f -X POST \
             "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
-            -F "file=@IsChrisVaping/build/IsChrisVaping.ino.bin;type=application/octet-stream"
+            -F "file=@firmware/.pio/build/esp32/firmware.bin;type=application/octet-stream"
