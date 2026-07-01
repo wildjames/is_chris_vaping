@@ -303,6 +303,8 @@ class OtaUpdateActivity : AppCompatActivity() {
                     val body = connection.inputStream.bufferedReader().readText()
                     val json = JSONObject(body)
                     serverFirmwareVersion = json.getString("version")
+                    // Log the server firmware version for debugging
+                    Log.d(TAG, "Server firmware version for variant $deviceBoardVariant: $serverFirmwareVersion")
                     mainHandler.post {
                         serverVersionText.text = "Server firmware: v$serverFirmwareVersion"
                         checkUpdateAvailable()
