@@ -33,6 +33,7 @@ class GattConnectionManager(
 
         val OTA_SERVICE_UUID: UUID = UUID.fromString("fb1e4001-54ae-4a28-9f74-dfccb248601d")
         val OTA_VERSION_UUID: UUID = UUID.fromString("fb1e4004-54ae-4a28-9f74-dfccb248601d")
+        val OTA_VARIANT_UUID: UUID = UUID.fromString("fb1e4005-54ae-4a28-9f74-dfccb248601d")
     }
 
     interface GattEventListener {
@@ -267,6 +268,12 @@ class GattConnectionManager(
                 mainHandler.postDelayed({ gatt.readCharacteristic(versionChar) }, VERSION_READ_DELAY_MS)
             }
 
+            // Read board variant from OTA service
+            val variantChar = otaService?.getCharacteristic(OTA_VARIANT_UUID)
+            if (variantChar != null) {
+                mainHandler.postDelayed({ gatt.readCharacteristic(variantChar) }, VERSION_READ_DELAY_MS + 500L)
+            }
+
             statusNotifier.updateStatus(statusNotifier.getOverallStatus(deviceRepository.devices.values))
         }
 
@@ -290,6 +297,13 @@ class GattConnectionManager(
                     if (version.isNotEmpty()) {
                         Log.d(TAG, "Read firmware version from ${vapeDevice.name}: $version")
                         vapeDevice.firmwareVersion = version
+                        statusNotifier.broadcastDevicesChanged()
+                    }
+                } else if (characteristic.uuid == OTA_VARIANT_UUID) {
+                    val variant = value.toString(Charsets.UTF_8).trim()
+                    if (variant.isNotEmpty()) {
+                        Log.d(TAG, "Read board variant from ${vapeDevice.name}: $variant")
+                        vapeDevice.boardVariant = variant
                         statusNotifier.broadcastDevicesChanged()
                     }
                 } else if (characteristic.uuid == CHARACTERISTIC_UUID) {

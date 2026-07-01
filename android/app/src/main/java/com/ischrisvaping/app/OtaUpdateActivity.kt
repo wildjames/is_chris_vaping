@@ -33,6 +33,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         val OTA_CONTROL_UUID: UUID = UUID.fromString("fb1e4002-54ae-4a28-9f74-dfccb248601d")
         val OTA_DATA_UUID: UUID = UUID.fromString("fb1e4003-54ae-4a28-9f74-dfccb248601d")
         val OTA_VERSION_UUID: UUID = UUID.fromString("fb1e4004-54ae-4a28-9f74-dfccb248601d")
+        val OTA_VARIANT_UUID: UUID = UUID.fromString("fb1e4005-54ae-4a28-9f74-dfccb248601d")
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
         private const val OTA_CMD_BEGIN: Byte = 0x01
@@ -51,6 +52,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var versionText: TextView
     private lateinit var serverVersionText: TextView
+    private lateinit var variantText: TextView
     private lateinit var rssiText: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var progressText: TextView
@@ -62,12 +64,14 @@ class OtaUpdateActivity : AppCompatActivity() {
     private var otaControlChar: BluetoothGattCharacteristic? = null
     private var otaDataChar: BluetoothGattCharacteristic? = null
     private var otaVersionChar: BluetoothGattCharacteristic? = null
+    private var otaVariantChar: BluetoothGattCharacteristic? = null
 
     private var firmwareData: ByteArray? = null
     private var isUpdating = false
     private var mtuSize = 23
     private var deviceFirmwareVersion: String? = null
     private var serverFirmwareVersion: String? = null
+    private var deviceBoardVariant: String = "esp32"
     private var awaitingReconnect = false
     private var targetDeviceAddress: String? = null
 
@@ -126,6 +130,18 @@ class OtaUpdateActivity : AppCompatActivity() {
                         checkUpdateAvailable()
                     }
                 }
+            } else if (characteristic.uuid == OTA_VARIANT_UUID && status == BluetoothGatt.GATT_SUCCESS) {
+                val variant = value.toString(Charsets.UTF_8)
+                deviceBoardVariant = variant
+                Log.d(TAG, "Device board variant: $variant")
+                mainHandler.post {
+                    variantText.text = "Board variant: $variant"
+                    // Now read version (BLE only allows one read at a time)
+                    @SuppressLint("MissingPermission")
+                    if (otaVersionChar != null) {
+                        bluetoothGatt?.readCharacteristic(otaVersionChar)
+                    }
+                }
             }
         }
 
@@ -136,8 +152,10 @@ class OtaUpdateActivity : AppCompatActivity() {
 
         @SuppressLint("MissingPermission")
         override fun onDescriptorWrite(descriptor: BluetoothGattDescriptor, status: Int) {
-            // Descriptor write completed - now safe to read the version characteristic
-            if (otaVersionChar != null) {
+            // Descriptor write completed - read variant first, then version
+            if (otaVariantChar != null) {
+                bluetoothGatt?.readCharacteristic(otaVariantChar)
+            } else if (otaVersionChar != null) {
                 bluetoothGatt?.readCharacteristic(otaVersionChar)
             }
         }
@@ -162,6 +180,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         statusText = findViewById(R.id.otaStatusText)
         versionText = findViewById(R.id.otaVersionText)
         serverVersionText = findViewById(R.id.otaServerVersionText)
+        variantText = findViewById(R.id.otaVariantText)
         rssiText = findViewById(R.id.otaRssiText)
         progressBar = findViewById(R.id.otaProgressBar)
         progressText = findViewById(R.id.otaProgressText)
@@ -196,6 +215,12 @@ class OtaUpdateActivity : AppCompatActivity() {
         }
         bleService?.selectedDeviceAddress = connectedDevice.address
 
+        // Use previously-read variant if available
+        connectedDevice.boardVariant?.let {
+            deviceBoardVariant = it
+            variantText.text = "Board variant: $it"
+        }
+
         val gatt = connectedDevice.gatt
         if (gatt == null) {
             updateStatus("Device not connected - go back and wait for connection")
@@ -226,6 +251,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         otaControlChar = otaService.getCharacteristic(OTA_CONTROL_UUID)
         otaDataChar = otaService.getCharacteristic(OTA_DATA_UUID)
         otaVersionChar = otaService.getCharacteristic(OTA_VERSION_UUID)
+        otaVariantChar = otaService.getCharacteristic(OTA_VARIANT_UUID)
 
         // Enable notifications on control characteristic
         gatt.setCharacteristicNotification(otaControlChar, true)
@@ -266,7 +292,7 @@ class OtaUpdateActivity : AppCompatActivity() {
                     return@execute
                 }
 
-                val url = URL("$baseUrl/firmware/latest")
+                val url = URL("$baseUrl/firmware/latest?variant=$deviceBoardVariant")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 10000
@@ -298,7 +324,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         executor.execute {
             try {
                 val baseUrl = getServerBaseUrl()
-                val url = URL("$baseUrl/firmware/download")
+                val url = URL("$baseUrl/firmware/download?variant=$deviceBoardVariant")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000

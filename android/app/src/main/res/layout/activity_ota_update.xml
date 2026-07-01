@@ -43,6 +43,18 @@
         android:layout_marginTop="4dp" />
 
     <TextView
+        android:id="@+id/otaVariantText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Board variant: unknown"
+        android:textSize="14sp"
+        android:textColor="@android:color/darker_gray"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/otaServerVersionText"
+        android:layout_marginTop="4dp" />
+
+    <TextView
         android:id="@+id/otaRssiText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -51,7 +63,7 @@
         android:textColor="@android:color/darker_gray"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/otaServerVersionText"
+        app:layout_constraintTop_toBottomOf="@id/otaVariantText"
         android:layout_marginTop="8dp" />
 
     <TextView

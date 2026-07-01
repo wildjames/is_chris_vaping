@@ -13,6 +13,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 VERSION_H = os.path.join(SCRIPT_DIR, "version.h")
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)  # firmware/ directory containing platformio.ini
 
+VARIANTS = ["esp32", "esp32_4mb"]
+
 
 def read_version():
     """Read the current version from version.h."""
@@ -47,45 +49,45 @@ def bump_version(bump_type):
     return f"{major}.{minor}.{patch}"
 
 
-def compile_firmware():
-    """Compile the firmware using PlatformIO and return the path to the .bin file."""
-    print("Compiling firmware...")
+def compile_firmware(variant):
+    """Compile the firmware for a given variant and return the path to the .bin file."""
+    print(f"Compiling firmware for variant '{variant}'...")
     env = os.environ.copy()
     env["IDF_COMPONENT_MANAGER"] = "0"
     result = subprocess.run(
-        ["pio", "run", "-e", "esp32"],
+        ["pio", "run", "-e", variant],
         cwd=PROJECT_DIR,
         env=env,
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        print(f"Compilation failed:\n{result.stderr}", file=sys.stderr)
+        print(f"Compilation failed for {variant}:\n{result.stderr}", file=sys.stderr)
         sys.exit(1)
     print(result.stdout)
 
-    bin_path = os.path.join(PROJECT_DIR, ".pio", "build", "esp32", "firmware.bin")
+    bin_path = os.path.join(PROJECT_DIR, ".pio", "build", variant, "firmware.bin")
     if not os.path.isfile(bin_path):
         print(f"Error: compiled binary not found at {bin_path}", file=sys.stderr)
         sys.exit(1)
     return bin_path
 
 
-def upload_firmware(firmware_path, version, server, token):
+def upload_firmware(firmware_path, version, variant, server, token):
     """Upload the compiled firmware to the server."""
-    print(f"Uploading v{version} to {server}...")
+    print(f"Uploading v{version} ({variant}) to {server}...")
     with open(firmware_path, "rb") as f:
         files = {"file": (os.path.basename(firmware_path), f, "application/octet-stream")}
         response = requests.post(
             f"{server.rstrip('/')}/firmware/upload",
-            params={"version": version},
+            params={"version": version, "variant": variant},
             headers={"Authorization": f"Bearer {token}"},
             files=files,
         )
 
     if response.status_code == 200:
         data = response.json()
-        print(f"Upload successful: v{data['version']} ({data['size']} bytes)")
+        print(f"Upload successful: v{data['version']} variant={data['variant']} ({data['size']} bytes)")
     else:
         print(f"Upload failed ({response.status_code}): {response.text}", file=sys.stderr)
         sys.exit(1)
@@ -101,6 +103,10 @@ def main():
     )
     parser.add_argument("--server", required=True, help="Server base URL (e.g. https://example.com)")
     parser.add_argument("--token", required=True, help="API auth token")
+    parser.add_argument(
+        "--variant", choices=VARIANTS, action="append",
+        help="Variant(s) to build and upload (default: all). Can be specified multiple times.",
+    )
     args = parser.parse_args()
 
     # Determine version
@@ -116,11 +122,14 @@ def main():
             sys.exit(1)
         write_version(int(parts[0]), int(parts[1]), int(parts[2]))
 
-    # Compile
-    firmware_path = compile_firmware()
+    variants = args.variant if args.variant else VARIANTS
 
-    # Upload
-    upload_firmware(firmware_path, version, args.server, args.token)
+    # Compile and upload each variant
+    for variant in variants:
+        firmware_path = compile_firmware(variant)
+        upload_firmware(firmware_path, version, variant, args.server, args.token)
+
+    print(f"\nAll done! v{version} uploaded for: {', '.join(variants)}")
 
 
 if __name__ == "__main__":
