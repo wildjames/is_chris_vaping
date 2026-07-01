@@ -48,7 +48,7 @@ jobs:
       - name: Get current version from server and bump
         id: version
         run: |
-          RESPONSE=$(curl -sf "${{ secrets.SERVER_URL }}/firmware/latest" || echo '{}')
+          RESPONSE=$(curl -sf "${{ secrets.SERVER_URL }}/firmware/latest?variant=esp32" || echo '{}')
           CURRENT=$(echo "$RESPONSE" | jq -r '.version // "0.0.0"')
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           case "${{ steps.bump.outputs.type }}" in
@@ -68,15 +68,28 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build firmware
+      - name: Build firmware (esp32)
         working-directory: firmware
         env:
           IDF_COMPONENT_MANAGER: "0"
         run: pio run -e esp32
 
-      - name: Upload firmware to server
+      - name: Build firmware (esp32_4mb)
+        working-directory: firmware
+        env:
+          IDF_COMPONENT_MANAGER: "0"
+        run: pio run -e esp32_4mb
+
+      - name: Upload firmware (esp32)
         run: |
           curl -f -X POST \
-            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}" \
+            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
             -F "file=@firmware/.pio/build/esp32/firmware.bin;type=application/octet-stream"
+
+      - name: Upload firmware (esp32_4mb)
+        run: |
+          curl -f -X POST \
+            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32_4mb" \
+            -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
+            -F "file=@firmware/.pio/build/esp32_4mb/firmware.bin;type=application/octet-stream"

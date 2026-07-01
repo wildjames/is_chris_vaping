@@ -198,5 +198,13 @@ void otaInit(BLEServer* pServer) {
   );
   pOtaVersion->setValue(FIRMWARE_VERSION);
 
+  // OTA Variant Characteristic (read-only) - tells the app which firmware binary to fetch
+  BLECharacteristic* pOtaVariant = pOtaService->createCharacteristic(
+    OTA_VARIANT_UUID,
+    BLECharacteristic::PROPERTY_READ
+  );
+  // This is the DBOARD_VARIANT macro defined in the platformio.ini build flags
+  pOtaVariant->setValue(BOARD_VARIANT);
+
   pOtaService->start();
 }
