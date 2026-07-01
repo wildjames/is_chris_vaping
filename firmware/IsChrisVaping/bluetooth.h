@@ -32,18 +32,8 @@ extern const char* MSG_COIL_A_STOPPED;
 extern const char* MSG_COIL_B_STARTED;
 extern const char* MSG_COIL_B_STOPPED;
 
-// Message buffer for offline events
-#define MSG_BUFFER_SIZE 16
-#define MSG_MAX_LEN 20
-#define FLUSH_DELAY_MS 500  // Delay after connect to allow client to subscribe
-
-extern bool pendingFlush;
-extern unsigned long flushAfterMs;
-
 void bluetoothInit();
 void sendBLEMessage(const char* msg);
-void flushBLEBuffer();
-void bluetoothUpdate();
 void loadVapeName();
 void saveVapeName(const char* name);
 

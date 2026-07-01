@@ -40,7 +40,6 @@ void setup() {
 
 void loop() {
   coilsUpdate();
-  bluetoothUpdate();
 
   // --- NOT_RIPPED timer ---
   if (notRippedTimerActive && (millis() - notRippedTimerStart >= NOT_RIPPED_DELAY_MS)) {
