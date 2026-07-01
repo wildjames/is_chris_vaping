@@ -9,6 +9,8 @@
 
 # Build artifacts
 IsChrisVaping/build/
+*.ino.cpp
+
 
 # Python
 __pycache__/
