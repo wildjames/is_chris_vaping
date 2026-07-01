@@ -7,47 +7,65 @@ extern unsigned long lastActivityTime;
 extern bool notRippedTimerActive;
 extern unsigned long notRippedTimerStart;
 
-// Coil state tracking
+// Debounce: require 100ms of continuous LOW before counting as stopped
+#define COIL_DEBOUNCE_MS 100
+
+struct CoilState {
+  uint8_t pin;
+  bool active;
+  bool lowTiming;
+  unsigned long lowStart;
+  void (*onStarted)();
+  void (*onStopped)();
+  const char *name;
+};
+
+static CoilState coils[] = {
+  {COIL_A_PIN, false, false, 0, handleCoilAStarted, handleCoilAStopped, "Coil A"},
+  {COIL_B_PIN, false, false, 0, handleCoilBStarted, handleCoilBStopped, "Coil B"},
+};
+
 bool coilAActive = false;
 bool coilBActive = false;
 
 void coilsInit() {
-  pinMode(COIL_A_PIN, INPUT);
-  pinMode(COIL_B_PIN, INPUT);
+  for (auto &c : coils) pinMode(c.pin, INPUT);
 }
 
 void coilsUpdate() {
-  // --- Coil A detection ---
-  if (digitalRead(COIL_A_PIN) == HIGH) {
-    if (!coilAActive) {
-      coilAActive = true;
-      lastActivityTime = millis();
-      Serial.println("Coil A active");
-      handleCoilAStarted();
-    }
-  } else {
-    if (coilAActive) {
-      coilAActive = false;
-      lastActivityTime = millis();
-      handleCoilAStopped();
+  for (auto &c : coils) {
+    // If the coil goes HIGH for a single read, consider the coil active immediately.
+    // However, if the coil goes LOW, require it to stay LOW for COIL_DEBOUNCE_MS before considering it inactive.
+
+    if (digitalRead(c.pin) == HIGH) {
+      c.lowTiming = false;
+      // Rising edge detection
+      if (!c.active) {
+        c.active = true;
+        lastActivityTime = millis();
+        Serial.println(String(c.name) + " active");
+        c.onStarted();
+      }
+
+    } else if (c.active) {
+      // Coil is currently active but pin is LOW, start debounce timer
+      if (!c.lowTiming) {
+        c.lowTiming = true;
+        c.lowStart = millis();
+      } else if (millis() - c.lowStart >= COIL_DEBOUNCE_MS) {
+        // Coil has been LOW for COIL_DEBOUNCE_MS, consider it stopped
+        Serial.println(String(c.name) + " inactive");
+        c.active = false;
+        c.lowTiming = false;
+        lastActivityTime = millis();
+        c.onStopped();
+      }
     }
   }
 
-  // --- Coil B detection ---
-  if (digitalRead(COIL_B_PIN) == HIGH) {
-    if (!coilBActive) {
-      coilBActive = true;
-      lastActivityTime = millis();
-      Serial.println("Coil B active");
-      handleCoilBStarted();
-    }
-  } else {
-    if (coilBActive) {
-      coilBActive = false;
-      lastActivityTime = millis();
-      handleCoilBStopped();
-    }
-  }
+  // Then update the state flags
+  coilAActive = coils[0].active;
+  coilBActive = coils[1].active;
 }
 
 void handleCoilAStarted() {
