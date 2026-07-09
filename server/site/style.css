@@ -70,9 +70,26 @@
   transition: opacity 0.3s;
 }
 
+.gif-bounce-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9998;
+  overflow: hidden;
+}
+
+.bouncing-gif {
+  position: absolute;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .rgb-overlay.active {
   opacity: 0.25;
-  animation: rgb-pulse 2s linear infinite;
+  animation: rgb-pulse 0.75s linear infinite;
 }
 
 @keyframes rgb-pulse {

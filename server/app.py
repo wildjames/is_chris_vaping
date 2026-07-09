@@ -35,6 +35,14 @@ SITE_DIR = Path(__file__).resolve().parent / "site"
 app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="")
 logging.basicConfig(level=logging.INFO)
 
+# Update gifs manifest on startup
+GIFS_DIR = SITE_DIR / "gifs"
+GIFS_DIR.mkdir(parents=True, exist_ok=True)
+_gif_extensions = {".gif", ".png", ".jpg", ".jpeg", ".webp"}
+_gif_manifest = [f.name for f in GIFS_DIR.iterdir() if f.suffix.lower() in _gif_extensions]
+(GIFS_DIR / "manifest.json").write_text(json.dumps(_gif_manifest))
+logging.basicConfig(level=logging.INFO)
+
 _db_executor = ThreadPoolExecutor(max_workers=2)
 atexit.register(_db_executor.shutdown, wait=True)
 
