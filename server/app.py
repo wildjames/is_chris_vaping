@@ -27,6 +27,7 @@ DB_NAME = os.environ.get("DB_NAME", "vape")
 
 FIRMWARE_DIR = Path(os.environ.get("FIRMWARE_DIR", "/firmware"))
 AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
+DEV_MODE = os.environ.get("DEV_MODE", "").lower() in ("1", "true", "yes")
 
 
 SITE_DIR = Path(__file__).resolve().parent / "site"
@@ -366,6 +367,11 @@ def firmware_upload():
 
     app.logger.info("Firmware uploaded: variant=%s version=%s size=%d", variant, version, file_size)
     return jsonify({"status": "ok", "version": version, "variant": variant, "size": file_size}), 200
+
+
+@app.route("/dev-config", methods=["GET"])
+def dev_config():
+    return jsonify({"dev_mode": DEV_MODE})
 
 
 @app.route("/", methods=["GET"])
