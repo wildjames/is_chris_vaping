@@ -38,6 +38,7 @@ function setStatusText(text) {
 
   statusElement.textContent = text;
   fitStatusText();
+}
 
 window.addEventListener("resize", fitStatusText);
 
@@ -47,13 +48,13 @@ setInterval(() => {
     .then(data => {
       let isVaping = data.is_vaping;
       if (isVaping) {
-        chrisIsVaping()
+        chrisIsVaping();
       } else {
-      const debugElement = document.getElementById("debug_par");
-      if (debugElement) debugElement.textContent = JSON.stringify(data);
+        chrisIsNotVaping();
       }
 
-      document.getElementById("debug_par").textContent = JSON.stringify(data);
+      const debugElement = document.getElementById("debug_par");
+      if (debugElement) debugElement.textContent = JSON.stringify(data);
     })
     .catch(error => {
         setStatusText("Failed to fetch vape status.");
