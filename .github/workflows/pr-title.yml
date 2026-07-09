@@ -15,7 +15,7 @@ jobs:
         with:
           filters: |
             firmware:
-              - 'IsChrisVaping/**'
+              - 'firmware/**'
 
       - name: Check PR title prefix
         if: steps.filter.outputs.firmware == 'true'
