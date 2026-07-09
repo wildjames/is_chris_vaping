@@ -6,9 +6,19 @@
   text-align: center;
 }
 
+.box > div {
+  width: min(100%, calc(100vw - 2rem));
+}
+
 .status {
   font-size: 10em;
   color: #333;
+}
+
+#status_par {
+  margin: 0;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .footer {
