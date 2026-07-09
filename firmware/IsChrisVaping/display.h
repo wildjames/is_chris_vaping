@@ -22,11 +22,11 @@ static constexpr uint8_t lineSpacing = 2;
 extern Adafruit_ST7789 tft;
 extern const char* currentDisplayText;
 
-#define BT_X_OFFSET 6
+#define BT_X_OFFSET 10
 #define BT_Y_OFFSET 10
 
-static constexpr int16_t vapeNameXOffset = 6;
-static constexpr int16_t vapeNameYOffset = 15;
+static constexpr int16_t vapeNameXOffset = 2;
+static constexpr int16_t vapeNameYOffset = 2;
 
 void displayInit();
 void showText(const char* text);
