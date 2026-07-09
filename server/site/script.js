@@ -30,9 +30,11 @@ function setStatusText(text) {
     return;
   }
 
+  if (statusElement.textContent === text) {
+    return;
+  }
   statusElement.textContent = text;
   fitStatusText();
-}
 
 window.addEventListener("resize", fitStatusText);
 
