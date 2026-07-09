@@ -12,6 +12,7 @@ services:
       - DB_USER=vape
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=vape
+      - DEV_MODE=true
     volumes:
       - firmware_data:/firmware
       - ./server/site:/app/site

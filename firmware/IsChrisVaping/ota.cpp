@@ -1,5 +1,6 @@
 #include "ota.h"
 #include "bluetooth.h"
+#include "display.h"
 #include <Update.h>
 #include <BLE2902.h>
 
@@ -74,6 +75,7 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks {
         }
 
         otaInProgress = true;
+        showText("Updating");
         response[0] = OTA_RSP_READY;
         pCharacteristic->setValue(response, 1);
         pCharacteristic->notify();
