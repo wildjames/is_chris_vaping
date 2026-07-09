@@ -23,8 +23,8 @@ void drawBtIcon() {
   uint16_t h = bluetooth_connected_height;
 
   // Clear the icon area and draw the new icon
-  tft.fillRect(0, 0, w + 2, h + 2, ST77XX_BLACK);
-  tft.drawBitmap(1, 1, btBitmap, w, h, ST77XX_WHITE);
+  tft.fillRect(BT_X_OFFSET, BT_Y_OFFSET, w + 2, h + 2, ST77XX_BLACK);
+  tft.drawBitmap(BT_X_OFFSET + 1, BT_Y_OFFSET + 1, btBitmap, w, h, ST77XX_WHITE);
 }
 
 void showText(const char* text) {
@@ -73,8 +73,8 @@ void drawVapeName() {
   uint8_t nameSize = 1;
   uint8_t nameCharW = 6 * nameSize;
   uint8_t nameCharH = 8 * nameSize;
-  int16_t x = 2;
-  int16_t y = 170 - nameCharH - 2;
+  int16_t x = vapeNameXOffset;
+  int16_t y = 170 - nameCharH - vapeNameYOffset;
 
   // Clear the full width of the name area to avoid leftover characters
   tft.fillRect(0, y - 1, MAX_VAPE_NAME_LEN * nameCharW + 4, nameCharH + 3, ST77XX_BLACK);
