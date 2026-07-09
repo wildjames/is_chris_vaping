@@ -30,9 +30,12 @@ function setStatusText(text) {
     return;
   }
 
-  if (statusElement.textContent === text) {
-    return;
-  }
+  if (statusElement.textContent === text) {
+
+    return;
+
+  }
+
   statusElement.textContent = text;
   fitStatusText();
 
@@ -46,7 +49,8 @@ setInterval(() => {
       if (isVaping) {
         chrisIsVaping()
       } else {
-        chrisIsNotVaping()
+      const debugElement = document.getElementById("debug_par");
+      if (debugElement) debugElement.textContent = JSON.stringify(data);
       }
 
       document.getElementById("debug_par").textContent = JSON.stringify(data);
