@@ -15,7 +15,9 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
+import android.net.Uri
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -23,6 +25,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import no.nordicsemi.android.dfu.DfuProgressListenerAdapter
+import no.nordicsemi.android.dfu.DfuServiceInitiator
+import no.nordicsemi.android.dfu.DfuServiceListenerHelper
 
 class OtaUpdateActivity : AppCompatActivity() {
 
@@ -79,6 +84,41 @@ class OtaUpdateActivity : AppCompatActivity() {
     private val responseQueue = LinkedBlockingQueue<ByteArray>()
     private val writeSemaphore = Semaphore(0)
     @Volatile private var lastWriteStatus: Int = BluetoothGatt.GATT_SUCCESS
+
+    private val dfuProgressListener = object : DfuProgressListenerAdapter() {
+        override fun onEnablingDfuMode(deviceAddress: String) {
+            mainHandler.post { updateStatus("Enabling DFU mode...") }
+        }
+        override fun onDfuProcessStarted(deviceAddress: String) {
+            mainHandler.post { updateStatus("DFU transfer in progress...") }
+        }
+        override fun onFirmwareValidating(deviceAddress: String) {
+            mainHandler.post { updateStatus("Validating firmware...") }
+        }
+        override fun onProgressChanged(deviceAddress: String, percent: Int, speed: Float, avgSpeed: Float, currentPart: Int, partsTotal: Int) {
+            mainHandler.post {
+                progressBar.progress = percent
+                progressText.text = "$percent%"
+            }
+        }
+        override fun onDfuCompleted(deviceAddress: String) {
+            DfuServiceListenerHelper.unregisterProgressListener(this@OtaUpdateActivity, this)
+            isUpdating = false
+            mainHandler.post {
+                progressBar.progress = 100
+                progressText.text = "Complete!"
+                waitForReconnect()
+            }
+        }
+        override fun onError(deviceAddress: String, error: Int, errorType: Int, message: String) {
+            DfuServiceListenerHelper.unregisterProgressListener(this@OtaUpdateActivity, this)
+            isUpdating = false
+            mainHandler.post {
+                updateStatus("DFU error: $message (code $error)")
+                startUpdateButton.isEnabled = true
+            }
+        }
+    }
     private val executor = Executors.newSingleThreadExecutor()
 
     private val rssiRunnable = object : Runnable {
@@ -253,8 +293,10 @@ class OtaUpdateActivity : AppCompatActivity() {
         otaVersionChar = otaService.getCharacteristic(OTA_VERSION_UUID)
         otaVariantChar = otaService.getCharacteristic(OTA_VARIANT_UUID)
 
-        // Enable notifications on control characteristic
-        gatt.setCharacteristicNotification(otaControlChar, true)
+        // Enable notifications on control characteristic (ESP32 only — nRF52840 uses Nordic DFU)
+        if (otaControlChar != null) {
+            gatt.setCharacteristicNotification(otaControlChar, true)
+        }
         val descriptor = otaControlChar?.getDescriptor(CCCD_UUID)
         if (descriptor != null) {
             // Version read will be triggered in onDescriptorWrite callback
@@ -359,7 +401,8 @@ class OtaUpdateActivity : AppCompatActivity() {
     private fun checkUpdateAvailable() {
         val deviceVer = deviceFirmwareVersion
         val serverVer = serverFirmwareVersion
-        if (deviceVer != null && serverVer != null && otaControlChar != null) {
+        val canUpdate = otaControlChar != null || deviceBoardVariant == "nrf52840"
+        if (deviceVer != null && serverVer != null && canUpdate) {
             if (deviceVer != serverVer) {
                 startUpdateButton.isEnabled = true
                 updateStatus("Update available: v$deviceVer → v$serverVer")
@@ -383,8 +426,13 @@ class OtaUpdateActivity : AppCompatActivity() {
                 return@downloadFirmware
             }
             firmwareData = data
-            updateStatus("Downloaded ${data.size} bytes. Starting BLE transfer...")
-            performBleUpdate()
+            if (deviceBoardVariant == "nrf52840") {
+                updateStatus("Downloaded ${data.size} bytes. Starting Nordic DFU...")
+                performNordicDfuUpdate(data)
+            } else {
+                updateStatus("Downloaded ${data.size} bytes. Starting BLE transfer...")
+                performBleUpdate()
+            }
         }
     }
 
@@ -435,6 +483,32 @@ class OtaUpdateActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun performNordicDfuUpdate(data: ByteArray) {
+        val address = targetDeviceAddress ?: bleService?.selectedDeviceAddress ?: run {
+            updateStatus("No device address for DFU")
+            startUpdateButton.isEnabled = true
+            return
+        }
+
+        val tempFile = File(cacheDir, "firmware_dfu.zip")
+        try {
+            tempFile.writeBytes(data)
+        } catch (e: Exception) {
+            updateStatus("Failed to save firmware: ${e.message}")
+            startUpdateButton.isEnabled = true
+            return
+        }
+
+        isUpdating = true
+        DfuServiceListenerHelper.registerProgressListener(this, dfuProgressListener)
+        updateStatus("Starting Nordic DFU transfer...")
+
+        DfuServiceInitiator(address)
+            .setDeviceName("IsChrisVaping")
+            .setZip(Uri.fromFile(tempFile))
+            .start(this, DfuService::class.java)
     }
 
     @SuppressLint("MissingPermission")
@@ -677,6 +751,7 @@ class OtaUpdateActivity : AppCompatActivity() {
                 )
             }
         }
+        DfuServiceListenerHelper.unregisterProgressListener(this, dfuProgressListener)
         bleService?.gattEventListener = null
         bleService?.selectedDeviceAddress = null
         if (serviceBound) {

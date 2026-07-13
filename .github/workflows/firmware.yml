@@ -67,7 +67,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install PlatformIO
-        run: pip install platformio
+        run: pip install platformio adafruit-nrfutil
 
       - name: Build firmware (esp32)
         working-directory: firmware/esp32
@@ -84,6 +84,13 @@ jobs:
       - name: Build firmware (nrf52840)
         working-directory: firmware/nrf52840
         run: pio run -e xiao_nrf52840
+
+      - name: Package nRF52840 DFU zip
+        run: |
+          adafruit-nrfutil dfu genpkg \
+            --dev-type 0x0052 \
+            --application firmware/nrf52840/.pio/build/xiao_nrf52840/firmware.hex \
+            firmware_nrf52840.zip
 
       - name: Upload firmware (esp32)
         run: |
@@ -104,4 +111,4 @@ jobs:
           curl -f -X POST \
             "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=nrf52840" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
-            -F "file=@firmware/nrf52840/.pio/build/xiao_nrf52840/firmware.hex;type=application/octet-stream"
+            -F "file=@firmware_nrf52840.zip;type=application/octet-stream"

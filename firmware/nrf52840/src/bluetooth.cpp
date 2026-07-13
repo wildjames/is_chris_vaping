@@ -1,4 +1,5 @@
 #include "bluetooth.h"
+#include "ota.h"
 #include "version.h"
 #include <Adafruit_LittleFS.h>
 #include <InternalFileSystem.h>
@@ -151,6 +152,9 @@ void bluetoothInit() {
     nameChar.setWriteCallback(nameWriteCallback);
     nameChar.begin();
     nameChar.write(vapeName, strlen(vapeName));
+
+    // OTA service — must be set up before advertising starts
+    otaInit();
 
     // Advertising — fast for 30 s then slow (saves power during long idle)
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
