@@ -83,13 +83,17 @@ jobs:
       - name: Upload firmware (esp32)
         run: |
           curl -f -X POST \
-            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32" \
+            "${{ secrets.SERVER_URL }}/firmware/upload" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
+            -F "version=${{ steps.version.outputs.version }}" \
+            -F "variant=esp32" \
             -F "file=@firmware/.pio/build/esp32/firmware.bin;type=application/octet-stream"
 
       - name: Upload firmware (esp32_4mb)
         run: |
           curl -f -X POST \
-            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32_4mb" \
+            "${{ secrets.SERVER_URL }}/firmware/upload" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
+            -F "version=${{ steps.version.outputs.version }}" \
+            -F "variant=esp32_4mb" \
             -F "file=@firmware/.pio/build/esp32_4mb/firmware.bin;type=application/octet-stream"

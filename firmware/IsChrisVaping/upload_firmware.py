@@ -80,7 +80,7 @@ def upload_firmware(firmware_path, version, variant, server, token):
         files = {"file": (os.path.basename(firmware_path), f, "application/octet-stream")}
         response = requests.post(
             f"{server.rstrip('/')}/firmware/upload",
-            params={"version": version, "variant": variant},
+            data={"version": version, "variant": variant},
             headers={"Authorization": f"Bearer {token}"},
             files=files,
         )

@@ -2,8 +2,9 @@ import atexit
 import json
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -166,6 +167,72 @@ def db_persist_vape_update(vape_name, coil, event, state, timestamp):
         app.logger.exception("Failed to persist vape update to DB")
 
 
+# --- Watchdog: auto-stop coils that have been active too long ---
+
+VAPE_TIMEOUT_SECONDS = 5 * 60  # 5 minutes
+WATCHDOG_INTERVAL_SECONDS = 60
+
+
+def check_stale_devices():
+    """Synthesize stopped events for coils that have been active for too long."""
+    now = datetime.now(timezone.utc)
+    try:
+        devices = cache_get_all_devices()
+    except Exception:
+        app.logger.exception("Watchdog: failed to retrieve devices")
+        return
+
+    for name, state in devices.items():
+        if not (state.get("coil_a") or state.get("coil_b")):
+            continue
+
+        last_updated_str = state.get("last_updated")
+        if not last_updated_str:
+            continue
+        try:
+            last_updated = datetime.fromisoformat(last_updated_str)
+        except (ValueError, TypeError):
+            continue
+        if last_updated.tzinfo is None:
+            last_updated = last_updated.replace(tzinfo=timezone.utc)
+
+        age = (now - last_updated).total_seconds()
+        if age <= VAPE_TIMEOUT_SECONDS:
+            continue
+
+        current_state = dict(state)
+        for coil in ("coil_a", "coil_b"):
+            if not current_state.get(coil):
+                continue
+            app.logger.warning(
+                "Watchdog: %s %s active for %.0fs, synthesizing stopped event",
+                name, coil, age,
+            )
+            current_state[coil] = False
+            current_state["last_event"] = f"{coil}:stopped"
+            current_state["last_updated"] = now.isoformat()
+            cache_set_device(name, current_state)
+            _db_executor.submit(
+                db_persist_vape_update, name, coil, "stopped", current_state.copy(), now
+            )
+
+
+def _watchdog_loop(stop_event):
+    while not stop_event.wait(WATCHDOG_INTERVAL_SECONDS):
+        try:
+            check_stale_devices()
+        except Exception:
+            app.logger.exception("Watchdog loop error")
+
+
+_watchdog_stop = threading.Event()
+_watchdog_thread = threading.Thread(
+    target=_watchdog_loop, args=(_watchdog_stop,), daemon=True, name="vape-watchdog"
+)
+_watchdog_thread.start()
+atexit.register(_watchdog_stop.set)
+
+
 def require_token(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -192,7 +259,16 @@ def vape_update():
     if event not in ("started", "stopped"):
         return jsonify({"error": "Invalid event, must be started or stopped"}), 400
 
-    now = datetime.now(timezone.utc)
+    ts_ms = data.get("timestamp")
+    if ts_ms is not None:
+        try:
+            now = datetime.fromtimestamp(int(ts_ms) / 1000.0, tz=timezone.utc)
+            if now > datetime.now(timezone.utc) + timedelta(seconds=60):
+                return jsonify({"error": "timestamp is too far in the future"}), 400
+        except (ValueError, OverflowError, OSError):
+            return jsonify({"error": "Invalid timestamp"}), 400
+    else:
+        now = datetime.now(timezone.utc)
 
     # Fast path: update Redis cache immediately
     state = cache_get_device(vape_name) or {
@@ -346,11 +422,11 @@ def firmware_download():
 @require_token
 def firmware_upload():
     """Upload a new firmware binary. Persists metadata to MariaDB."""
-    version = request.args.get("version")
+    version = request.form.get("version")
     if not version:
-        return jsonify({"error": "version query parameter required"}), 400
+        return jsonify({"error": "version field required"}), 400
 
-    variant = request.args.get("variant", "esp32")
+    variant = request.form.get("variant", "esp32")
 
     if "file" not in request.files:
         return jsonify({"error": "No file part in request"}), 400
