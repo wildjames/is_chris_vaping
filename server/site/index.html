@@ -13,6 +13,8 @@
     </style>
 </head>
 <body>
+  <div id="rgb-overlay" class="rgb-overlay"></div>
+  <div id="gif-bounce-container" class="gif-bounce-container" style="display:none;"></div>
   <script src="script.js"></script>
   <div class="box">
     <div>
@@ -20,6 +22,10 @@
       <br/>
       <p id="status_par" class="status">...</p>
     </div>
+  </div>
+  <div id="dev-controls" class="dev-controls" style="display:none;">
+    <button id="btn-dev-mode">Dev Mode: OFF</button>
+    <button id="btn-toggle-state" disabled>Toggle Vape State</button>
   </div>
   <div class="footer">
     <p id="debug_par" class="status debug">...</p>

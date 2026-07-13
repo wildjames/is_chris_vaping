@@ -34,3 +34,70 @@
   font-size: 0.8em;
   color: #666;
 }
+
+.dev-controls {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 10000;
+  display: flex;
+  gap: 8px;
+}
+
+.dev-controls button {
+  padding: 6px 12px;
+  font-size: 0.9em;
+  cursor: pointer;
+  border: 1px solid #999;
+  border-radius: 4px;
+  background: #f0f0f0;
+}
+
+.dev-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rgb-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.gif-bounce-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9998;
+  overflow: hidden;
+}
+
+.bouncing-gif {
+  position: absolute;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.rgb-overlay.active {
+  opacity: 0.25;
+  animation: rgb-pulse 0.75s linear infinite;
+}
+
+@keyframes rgb-pulse {
+  0%   { background-color: red; }
+  16%  { background-color: yellow; }
+  33%  { background-color: lime; }
+  50%  { background-color: cyan; }
+  66%  { background-color: blue; }
+  83%  { background-color: magenta; }
+  100% { background-color: red; }
+}

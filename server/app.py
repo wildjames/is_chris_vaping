@@ -27,11 +27,20 @@ DB_NAME = os.environ.get("DB_NAME", "vape")
 
 FIRMWARE_DIR = Path(os.environ.get("FIRMWARE_DIR", "/firmware"))
 AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
+DEV_MODE = os.environ.get("DEV_MODE", "").lower() in ("1", "true", "yes")
 
 
 SITE_DIR = Path(__file__).resolve().parent / "site"
 
 app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="")
+logging.basicConfig(level=logging.INFO)
+
+# Update gifs manifest on startup
+GIFS_DIR = SITE_DIR / "gifs"
+GIFS_DIR.mkdir(parents=True, exist_ok=True)
+_gif_extensions = {".gif", ".png", ".jpg", ".jpeg", ".webp"}
+_gif_manifest = [f.name for f in GIFS_DIR.iterdir() if f.suffix.lower() in _gif_extensions]
+(GIFS_DIR / "manifest.json").write_text(json.dumps(_gif_manifest))
 logging.basicConfig(level=logging.INFO)
 
 _db_executor = ThreadPoolExecutor(max_workers=2)
@@ -366,6 +375,11 @@ def firmware_upload():
 
     app.logger.info("Firmware uploaded: variant=%s version=%s size=%d", variant, version, file_size)
     return jsonify({"status": "ok", "version": version, "variant": variant, "size": file_size}), 200
+
+
+@app.route("/dev-config", methods=["GET"])
+def dev_config():
+    return jsonify({"dev_mode": DEV_MODE})
 
 
 @app.route("/", methods=["GET"])
