@@ -57,7 +57,8 @@ jobs:
             PATCH) PATCH=$((PATCH + 1)) ;;
           esac
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          sed -i "s/<dev>/$NEW_VERSION/" firmware/IsChrisVaping/version.h
+          sed -i "s/<dev>/$NEW_VERSION/" firmware/esp32/IsChrisVaping/version.h
+          sed -i "s/<dev>/$NEW_VERSION/" firmware/nrf52840/src/version.h
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up Python 3.12
@@ -69,27 +70,38 @@ jobs:
         run: pip install platformio
 
       - name: Build firmware (esp32)
-        working-directory: firmware
+        working-directory: firmware/esp32
         env:
           IDF_COMPONENT_MANAGER: "0"
         run: pio run -e esp32
 
       - name: Build firmware (esp32_4mb)
-        working-directory: firmware
+        working-directory: firmware/esp32
         env:
           IDF_COMPONENT_MANAGER: "0"
         run: pio run -e esp32_4mb
+
+      - name: Build firmware (nrf52840)
+        working-directory: firmware/nrf52840
+        run: pio run -e xiao_nrf52840
 
       - name: Upload firmware (esp32)
         run: |
           curl -f -X POST \
             "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
-            -F "file=@firmware/.pio/build/esp32/firmware.bin;type=application/octet-stream"
+            -F "file=@firmware/esp32/.pio/build/esp32/firmware.bin;type=application/octet-stream"
 
       - name: Upload firmware (esp32_4mb)
         run: |
           curl -f -X POST \
             "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32_4mb" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
-            -F "file=@firmware/.pio/build/esp32_4mb/firmware.bin;type=application/octet-stream"
+            -F "file=@firmware/esp32/.pio/build/esp32_4mb/firmware.bin;type=application/octet-stream"
+
+      - name: Upload firmware (nrf52840)
+        run: |
+          curl -f -X POST \
+            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=nrf52840" \
+            -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
+            -F "file=@firmware/nrf52840/.pio/build/xiao_nrf52840/firmware.hex;type=application/octet-stream"
