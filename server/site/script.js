@@ -1,6 +1,8 @@
 const STATUS_MAX_EM = 10;
 const STATUS_MIN_PX = 1;
 
+let soundEnabled = false;
+
 let devModeActive = false;
 let devVapeState = false;
 let devModeAvailable = false;
@@ -107,11 +109,35 @@ setInterval(() => {
     });
 }, 100);
 
+document.getElementById("btn-sound").addEventListener("click", () => {
+  const audio = document.getElementById("bg-audio");
+  const btn = document.getElementById("btn-sound");
+  soundEnabled = !soundEnabled;
+  if (soundEnabled) {
+    audio.play();
+    btn.textContent = "🔊";
+    btn.title = "Disable sound";
+  } else {
+    btn.textContent = "🔇";
+    btn.title = "Enable sound";
+  }
+  updateAudioMute();
+});
+
+function updateAudioMute() {
+  const audio = document.getElementById("bg-audio");
+  audio.muted = !soundEnabled || !currentlyVaping;
+}
+
+let currentlyVaping = false;
+
 function chrisIsVaping() {
   const statusText = "Yep";
   setStatusText(statusText);
   document.getElementById("rgb-overlay").classList.add("active");
   startBouncingGifs();
+  currentlyVaping = true;
+  updateAudioMute();
 }
 
 function chrisIsNotVaping() {
@@ -119,6 +145,8 @@ function chrisIsNotVaping() {
   setStatusText(statusText);
   document.getElementById("rgb-overlay").classList.remove("active");
   stopBouncingGifs();
+  currentlyVaping = false;
+  updateAudioMute();
 }
 
 // --- Bouncing GIFs ---
