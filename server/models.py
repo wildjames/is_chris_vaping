@@ -38,6 +38,7 @@ class Firmware(Base):
     version: Mapped[str] = mapped_column(String(100), nullable=False)
     variant: Mapped[str] = mapped_column(String(50), nullable=False, default="esp32")
     size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

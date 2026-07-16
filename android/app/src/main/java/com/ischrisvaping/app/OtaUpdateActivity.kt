@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
@@ -76,6 +77,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     private var mtuSize = 23
     private var deviceFirmwareVersion: String? = null
     private var serverFirmwareVersion: String? = null
+    private var serverFirmwareSha256: String? = null
     private var deviceBoardVariant: String = "esp32"
     private var awaitingReconnect = false
     private var targetDeviceAddress: String? = null
@@ -328,6 +330,10 @@ class OtaUpdateActivity : AppCompatActivity() {
         // Strip the path (e.g. /vape-update) to get the base URL
         return if (url.isNotBlank()) {
             val parsed = URL(url)
+            if (parsed.protocol != "https") {
+                Log.e(TAG, "Server URL must use HTTPS")
+                return ""
+            }
             "${parsed.protocol}://${parsed.host}${if (parsed.port != -1 && parsed.port != parsed.defaultPort) ":${parsed.port}" else ""}"
         } else ""
     }
@@ -352,6 +358,7 @@ class OtaUpdateActivity : AppCompatActivity() {
                     val body = connection.inputStream.bufferedReader().readText()
                     val json = JSONObject(body)
                     serverFirmwareVersion = json.getString("version")
+                    serverFirmwareSha256 = json.optString("sha256", null)
                     // Log the server firmware version for debugging
                     Log.d(TAG, "Server firmware version for variant $deviceBoardVariant: $serverFirmwareVersion")
                     mainHandler.post {
@@ -382,17 +389,27 @@ class OtaUpdateActivity : AppCompatActivity() {
                 connection.readTimeout = 30000
 
                 if (connection.responseCode == 200) {
+                    val digest = MessageDigest.getInstance("SHA-256")
                     val buffer = ByteArrayOutputStream()
                     val data = ByteArray(8192)
                     var bytesRead: Int
                     connection.inputStream.use { input ->
                         while (input.read(data).also { bytesRead = it } != -1) {
                             buffer.write(data, 0, bytesRead)
+                            digest.update(data, 0, bytesRead)
                         }
                     }
                     val firmware = buffer.toByteArray()
-                    Log.d(TAG, "Downloaded firmware: ${firmware.size} bytes")
-                    mainHandler.post { onComplete(firmware) }
+                    val downloadedHash = digest.digest().joinToString("") { "%02x".format(it) }
+                    Log.d(TAG, "Downloaded firmware: ${firmware.size} bytes, SHA-256: $downloadedHash")
+
+                    val expectedHash = serverFirmwareSha256
+                    if (expectedHash != null && downloadedHash != expectedHash) {
+                        Log.e(TAG, "Checksum mismatch! Expected: $expectedHash, got: $downloadedHash")
+                        mainHandler.post { onComplete(null) }
+                    } else {
+                        mainHandler.post { onComplete(firmware) }
+                    }
                 } else {
                     Log.e(TAG, "Download failed: ${connection.responseCode}")
                     mainHandler.post { onComplete(null) }

@@ -282,8 +282,17 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Server Settings")
             .setView(layout)
             .setPositiveButton("Save") { _, _ ->
+                val url = urlInput.text.toString().trim()
+                if (url.isNotBlank() && !url.startsWith("https://")) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Insecure URL")
+                        .setMessage("Server URL must use HTTPS to protect credentials and firmware downloads.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setPositiveButton
+                }
                 prefs.edit()
-                    .putString("server_url", urlInput.text.toString().trim())
+                    .putString("server_url", url)
                     .putString("auth_token", tokenInput.text.toString().trim())
                     .apply()
             }

@@ -1,4 +1,5 @@
 import atexit
+import hashlib
 import json
 import logging
 import os
@@ -314,6 +315,7 @@ def firmware_latest():
             "version": fw.version,
             "variant": fw.variant,
             "size": fw.size,
+            "sha256": fw.sha256,
             "uploaded_at": fw.uploaded_at.isoformat() if fw.uploaded_at else None,
         }), 200
     finally:
@@ -364,17 +366,18 @@ def firmware_upload():
     file.save(firmware_path)
 
     file_size = firmware_path.stat().st_size
+    file_hash = hashlib.sha256(firmware_path.read_bytes()).hexdigest()
     now = datetime.now(timezone.utc)
 
     session = Session()
     try:
-        session.add(Firmware(version=version, variant=variant, size=file_size, uploaded_at=now))
+        session.add(Firmware(version=version, variant=variant, size=file_size, sha256=file_hash, uploaded_at=now))
         session.commit()
     finally:
         session.close()
 
-    app.logger.info("Firmware uploaded: variant=%s version=%s size=%d", variant, version, file_size)
-    return jsonify({"status": "ok", "version": version, "variant": variant, "size": file_size}), 200
+    app.logger.info("Firmware uploaded: variant=%s version=%s size=%d sha256=%s", variant, version, file_size, file_hash)
+    return jsonify({"status": "ok", "version": version, "variant": variant, "size": file_size, "sha256": file_hash}), 200
 
 
 @app.route("/dev-config", methods=["GET"])
