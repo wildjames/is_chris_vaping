@@ -1,31 +1,14 @@
 name: Build and Upload Firmware
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
+    paths:
+      - 'firmware/**'
 
 jobs:
-  check-changes:
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true
-    outputs:
-      firmware_changed: ${{ steps.filter.outputs.firmware }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Check for firmware code changes
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            firmware:
-              - 'firmware/**'
-
   build-and-upload:
     runs-on: ubuntu-latest
-    needs: check-changes
-    if: needs.check-changes.outputs.firmware_changed == 'true'
 
     steps:
       - uses: actions/checkout@v6
@@ -33,22 +16,22 @@ jobs:
       - name: Determine version bump
         id: bump
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          if [[ "$TITLE" =~ ^MAJOR ]]; then
+          MSG=$(git log -1 --pretty=%s)
+          if [[ "$MSG" =~ ^MAJOR ]]; then
             echo "type=MAJOR" >> $GITHUB_OUTPUT
-          elif [[ "$TITLE" =~ ^MINOR ]]; then
+          elif [[ "$MSG" =~ ^MINOR ]]; then
             echo "type=MINOR" >> $GITHUB_OUTPUT
-          elif [[ "$TITLE" =~ ^PATCH ]]; then
+          elif [[ "$MSG" =~ ^PATCH ]]; then
             echo "type=PATCH" >> $GITHUB_OUTPUT
           else
-            echo "::error::PR title must start with MAJOR, MINOR, or PATCH"
+            echo "::error::Commit message must start with MAJOR, MINOR, or PATCH"
             exit 1
           fi
 
       - name: Get current version from server and bump
         id: version
         run: |
-          RESPONSE=$(curl -sf "${{ secrets.SERVER_URL }}/firmware/latest?variant=esp32" || echo '{}')
+          RESPONSE=$(curl -sf "${{ secrets.SERVER_URL }}/firmware/latest" || echo '{}')
           CURRENT=$(echo "$RESPONSE" | jq -r '.version // "0.0.0"')
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           case "${{ steps.bump.outputs.type }}" in
@@ -57,7 +40,6 @@ jobs:
             PATCH) PATCH=$((PATCH + 1)) ;;
           esac
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          sed -i "s/<dev>/$NEW_VERSION/" firmware/esp32/IsChrisVaping/version.h
           sed -i "s/<dev>/$NEW_VERSION/" firmware/nrf52840/src/version.h
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
@@ -68,18 +50,6 @@ jobs:
 
       - name: Install PlatformIO
         run: pip install platformio adafruit-nrfutil
-
-      - name: Build firmware (esp32)
-        working-directory: firmware/esp32
-        env:
-          IDF_COMPONENT_MANAGER: "0"
-        run: pio run -e esp32
-
-      - name: Build firmware (esp32_4mb)
-        working-directory: firmware/esp32
-        env:
-          IDF_COMPONENT_MANAGER: "0"
-        run: pio run -e esp32_4mb
 
       - name: Build firmware (nrf52840)
         working-directory: firmware/nrf52840
@@ -92,23 +62,9 @@ jobs:
             --application firmware/nrf52840/.pio/build/nrf52840/firmware.hex \
             firmware_nrf52840.zip
 
-      - name: Upload firmware (esp32)
-        run: |
-          curl -f -X POST \
-            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32" \
-            -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
-            -F "file=@firmware/esp32/.pio/build/esp32/firmware.bin;type=application/octet-stream"
-
-      - name: Upload firmware (esp32_4mb)
-        run: |
-          curl -f -X POST \
-            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=esp32_4mb" \
-            -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
-            -F "file=@firmware/esp32/.pio/build/esp32_4mb/firmware.bin;type=application/octet-stream"
-
       - name: Upload firmware (nrf52840)
         run: |
           curl -f -X POST \
-            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}&variant=nrf52840" \
+            "${{ secrets.SERVER_URL }}/firmware/upload?version=${{ steps.version.outputs.version }}" \
             -H "Authorization: Bearer ${{ secrets.FIRMWARE_TOKEN }}" \
             -F "file=@firmware_nrf52840.zip;type=application/octet-stream"

@@ -303,11 +303,10 @@ def health():
 @app.route("/firmware/latest", methods=["GET"])
 def firmware_latest():
     """Returns metadata about the latest firmware version from MariaDB."""
-    variant = request.args.get("variant", "esp32")
     session = Session()
     try:
         fw = session.execute(
-            select(Firmware).where(Firmware.variant == variant).order_by(Firmware.id.desc())
+            select(Firmware).order_by(Firmware.id.desc())
         ).scalars().first()
         if not fw:
             return jsonify({"error": "No firmware available"}), 404
@@ -315,7 +314,7 @@ def firmware_latest():
         # Compute size and checksum from the actual file on disk so the
         # metadata can never go stale if the file is replaced outside the
         # upload endpoint.
-        firmware_path = FIRMWARE_DIR / f"firmware-{variant}.bin"
+        firmware_path = FIRMWARE_DIR / "firmware.bin"
         if firmware_path.is_file():
             file_size = firmware_path.stat().st_size
             hasher = hashlib.sha256()
@@ -329,7 +328,6 @@ def firmware_latest():
 
         return jsonify({
             "version": fw.version,
-            "variant": fw.variant,
             "size": file_size,
             "sha256": file_hash,
             "uploaded_at": fw.uploaded_at.isoformat() if fw.uploaded_at else None,
@@ -340,12 +338,11 @@ def firmware_latest():
 
 @app.route("/firmware/download", methods=["GET"])
 def firmware_download():
-    """Download the latest firmware binary for a given variant."""
-    variant = request.args.get("variant", "esp32")
+    """Download the latest firmware binary."""
     session = Session()
     try:
         fw = session.execute(
-            select(Firmware).where(Firmware.variant == variant).order_by(Firmware.id.desc())
+            select(Firmware).order_by(Firmware.id.desc())
         ).scalars().first()
         if not fw:
             return jsonify({"error": "No firmware available"}), 404
@@ -353,11 +350,11 @@ def firmware_download():
     finally:
         session.close()
 
-    firmware_path = FIRMWARE_DIR / f"firmware-{variant}.bin"
+    firmware_path = FIRMWARE_DIR / "firmware.bin"
     if not firmware_path.is_file():
         return jsonify({"error": "Firmware file missing"}), 404
     return send_file(firmware_path, mimetype="application/octet-stream",
-                     download_name=f"firmware-{variant}-{version}.bin")
+                     download_name=f"firmware-{version}.bin")
 
 
 @app.route("/firmware/upload", methods=["POST"])
@@ -368,8 +365,6 @@ def firmware_upload():
     if not version:
         return jsonify({"error": "version query parameter required"}), 400
 
-    variant = request.args.get("variant", "esp32")
-
     if "file" not in request.files:
         return jsonify({"error": "No file part in request"}), 400
 
@@ -378,7 +373,7 @@ def firmware_upload():
         return jsonify({"error": "No file selected"}), 400
 
     FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
-    firmware_path = FIRMWARE_DIR / f"firmware-{variant}.bin"
+    firmware_path = FIRMWARE_DIR / "firmware.bin"
     file.save(firmware_path)
 
     file_size = firmware_path.stat().st_size
@@ -396,13 +391,13 @@ def firmware_upload():
 
     session = Session()
     try:
-        session.add(Firmware(version=version, variant=variant, size=file_size, sha256=file_hash, uploaded_at=now))
+        session.add(Firmware(version=version, size=file_size, sha256=file_hash, uploaded_at=now))
         session.commit()
     finally:
         session.close()
 
-    app.logger.info("Firmware uploaded: variant=%s version=%s size=%d sha256=%s", variant, version, file_size, file_hash)
-    return jsonify({"status": "ok", "version": version, "variant": variant, "size": file_size, "sha256": file_hash}), 200
+    app.logger.info("Firmware uploaded: version=%s size=%d sha256=%s", version, file_size, file_hash)
+    return jsonify({"status": "ok", "version": version, "size": file_size, "sha256": file_hash}), 200
 
 
 @app.route("/dev-config", methods=["GET"])

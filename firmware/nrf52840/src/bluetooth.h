@@ -2,7 +2,7 @@
 
 #include <bluefruit.h>
 
-// UUIDs — must match ESP32 firmware and the companion app
+// UUIDs — must match the companion app
 #define SERVICE_UUID              "189a9192-f68f-4ac4-962e-d70e7c3755a0"
 #define CHARACTERISTIC_UUID       "5cf4a205-84e1-42ad-ac23-e5adc776a992"
 #define NAME_CHARACTERISTIC_UUID  "5cf4a205-84e1-42ad-ac23-e5adc776a993"
