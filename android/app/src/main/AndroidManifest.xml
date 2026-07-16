@@ -39,7 +39,8 @@
 
         <service
             android:name=".DfuService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
     </application>
 
