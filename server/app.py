@@ -366,7 +366,11 @@ def firmware_upload():
     file.save(firmware_path)
 
     file_size = firmware_path.stat().st_size
-    file_hash = hashlib.sha256(firmware_path.read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with firmware_path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    file_hash = hasher.hexdigest()
     now = datetime.now(timezone.utc)
 
     session = Session()
