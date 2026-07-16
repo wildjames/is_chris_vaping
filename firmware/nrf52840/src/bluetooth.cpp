@@ -73,6 +73,7 @@ void saveVapeName(const char* name) {
 static void connectCallback(uint16_t conn_hdl) {
     (void)conn_hdl;
     deviceConnected = true;
+    digitalWrite(LED_RED, LOW);  // Active-low: LOW = on
     Serial.println("BLE connected");
     // Stop advertising while connected to save power
     Bluefruit.Advertising.stop();
@@ -81,6 +82,7 @@ static void connectCallback(uint16_t conn_hdl) {
 static void disconnectCallback(uint16_t conn_hdl, uint8_t reason) {
     (void)conn_hdl;
     deviceConnected = false;
+    digitalWrite(LED_RED, HIGH);  // Active-low: HIGH = off
     Serial.printf("BLE disconnected (reason=0x%02X)\n", reason);
     // Resume advertising so the phone can reconnect
     Bluefruit.Advertising.start(0);
@@ -117,6 +119,10 @@ void sendBLEMessage(const char* msg) {
 
 void bluetoothInit() {
     loadVapeName();
+
+    // Red LED indicates BLE connection status
+    pinMode(LED_RED, OUTPUT);
+    digitalWrite(LED_RED, HIGH);  // Start off (active-low)
 
     Bluefruit.begin();
     Bluefruit.setName("IsChrisVaping");
