@@ -288,24 +288,31 @@ class OtaUpdateActivity : AppCompatActivity() {
             return
         }
 
-        otaControlChar = otaService.getCharacteristic(OTA_CONTROL_UUID)
-        otaDataChar = otaService.getCharacteristic(OTA_DATA_UUID)
         otaVersionChar = otaService.getCharacteristic(OTA_VERSION_UUID)
         otaVariantChar = otaService.getCharacteristic(OTA_VARIANT_UUID)
 
-        // Enable notifications on control characteristic (ESP32 only — nRF52840 uses Nordic DFU)
-        if (otaControlChar != null) {
-            gatt.setCharacteristicNotification(otaControlChar, true)
-        }
-        val descriptor = otaControlChar?.getDescriptor(CCCD_UUID)
-        if (descriptor != null) {
-            // Version read will be triggered in onDescriptorWrite callback
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-        } else {
-            // No descriptor to write, read version directly
-            if (otaVersionChar != null) {
-                gatt.readCharacteristic(otaVersionChar)
+        // ESP32 uses a custom OTA protocol via control/data characteristics;
+        // nRF52840 uses Nordic DFU so these characteristics don't exist.
+        if (deviceBoardVariant != "nrf52840") {
+            otaControlChar = otaService.getCharacteristic(OTA_CONTROL_UUID)
+            otaDataChar = otaService.getCharacteristic(OTA_DATA_UUID)
+
+            if (otaControlChar != null) {
+                gatt.setCharacteristicNotification(otaControlChar, true)
             }
+            val descriptor = otaControlChar?.getDescriptor(CCCD_UUID)
+            if (descriptor != null) {
+                // Version read will be triggered in onDescriptorWrite callback
+                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                return
+            }
+        }
+
+        // No descriptor path (nRF52840, or ESP32 without CCCD): read variant then version
+        if (otaVariantChar != null) {
+            gatt.readCharacteristic(otaVariantChar)
+        } else if (otaVersionChar != null) {
+            gatt.readCharacteristic(otaVersionChar)
         }
 
         updateStatus("Connected to device")
@@ -743,7 +750,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         mainHandler.removeCallbacks(rssiRunnable)
-        if (isUpdating) {
+        if (isUpdating && deviceBoardVariant != "nrf52840") {
             val controlChar = otaControlChar
             if (controlChar != null && bluetoothGatt != null) {
                 bluetoothGatt?.writeCharacteristic(
