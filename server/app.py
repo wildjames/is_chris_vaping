@@ -314,7 +314,7 @@ def firmware_latest():
         # Compute size and checksum from the actual file on disk so the
         # metadata can never go stale if the file is replaced outside the
         # upload endpoint.
-        firmware_path = FIRMWARE_DIR / "firmware.bin"
+        firmware_path = FIRMWARE_DIR / "firmware.zip"
         if firmware_path.is_file():
             file_size = firmware_path.stat().st_size
             hasher = hashlib.sha256()
@@ -338,7 +338,7 @@ def firmware_latest():
 
 @app.route("/firmware/download", methods=["GET"])
 def firmware_download():
-    """Download the latest firmware binary."""
+    """Download the latest firmware DFU package (ZIP)."""
     session = Session()
     try:
         fw = session.execute(
@@ -350,17 +350,17 @@ def firmware_download():
     finally:
         session.close()
 
-    firmware_path = FIRMWARE_DIR / "firmware.bin"
+    firmware_path = FIRMWARE_DIR / "firmware.zip"
     if not firmware_path.is_file():
         return jsonify({"error": "Firmware file missing"}), 404
-    return send_file(firmware_path, mimetype="application/octet-stream",
-                     download_name=f"firmware-{version}.bin")
+    return send_file(firmware_path, mimetype="application/zip",
+                     download_name=f"firmware-{version}.zip")
 
 
 @app.route("/firmware/upload", methods=["POST"])
 @require_token
 def firmware_upload():
-    """Upload a new firmware binary. Persists metadata to MariaDB."""
+    """Upload a new firmware DFU package (ZIP). Persists metadata to MariaDB."""
     version = request.args.get("version")
     if not version:
         return jsonify({"error": "version query parameter required"}), 400
@@ -373,16 +373,24 @@ def firmware_upload():
         return jsonify({"error": "No file selected"}), 400
 
     FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
-    firmware_path = FIRMWARE_DIR / "firmware.bin"
+    firmware_path = FIRMWARE_DIR / "firmware.zip"
     file.save(firmware_path)
+
+    # Validate that the uploaded file is a valid ZIP with a DFU manifest
+    import zipfile
+    if not zipfile.is_zipfile(firmware_path):
+        firmware_path.unlink()
+        return jsonify({"error": "Uploaded file is not a valid ZIP"}), 400
+    with zipfile.ZipFile(firmware_path, "r") as zf:
+        if "manifest.json" not in zf.namelist():
+            firmware_path.unlink()
+            return jsonify({"error": "ZIP missing manifest.json — use adafruit-nrfutil dfu genpkg to create the package"}), 400
 
     file_size = firmware_path.stat().st_size
     hasher = hashlib.sha256()
 
     with firmware_path.open("rb") as f:
-
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
-
             hasher.update(chunk)
 
     file_hash = hasher.hexdigest()

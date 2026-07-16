@@ -412,6 +412,12 @@ class OtaUpdateActivity : AppCompatActivity() {
             // address (original +1). Tell the DFU library to scan for the
             // bootloader instead of connecting to the original address.
             .setForceScanningForNewAddressInLegacyDfu(true)
+            // Retry on flaky BLE disconnections
+            .setNumberOfRetries(3)
+            // The Adafruit bootloader requires PRN ≤ 8 or it runs out of
+            // buffer space and drops packets.
+            .setPacketsReceiptNotificationsEnabled(true)
+            .setPacketsReceiptNotificationsValue(8)
             .start(this, DfuService::class.java)
     }
 
