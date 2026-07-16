@@ -21,7 +21,6 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.Semaphore
@@ -85,7 +84,6 @@ class OtaUpdateActivity : AppCompatActivity() {
     private val responseQueue = LinkedBlockingQueue<ByteArray>()
     private val writeSemaphore = Semaphore(0)
     @Volatile private var lastWriteStatus: Int = BluetoothGatt.GATT_SUCCESS
-    private var reconnectLatch: CountDownLatch? = null
 
     private val dfuProgressListener = object : DfuProgressListenerAdapter() {
         override fun onEnablingDfuMode(deviceAddress: String) {
@@ -212,13 +210,6 @@ class OtaUpdateActivity : AppCompatActivity() {
 
         override fun onReadRemoteRssi(rssi: Int) {
             mainHandler.post { updateRssiDisplay(rssi) }
-        }
-
-        override fun onConnectionStateChange(device: VapeDevice, connected: Boolean) {
-            if (connected && awaitingReconnect) {
-                bluetoothGatt = device.gatt
-                reconnectLatch?.countDown()
-            }
         }
     }
 
@@ -710,23 +701,42 @@ class OtaUpdateActivity : AppCompatActivity() {
             updateStatus("Waiting for device to reboot...")
         }
 
-        val latch = CountDownLatch(1)
-        reconnectLatch = latch
-
         executor.execute {
-            val reconnected = latch.await(30, TimeUnit.SECONDS)
-            reconnectLatch = null
+            val maxWaitMs = 30000L
+            val pollIntervalMs = 500L
+            val startTime = System.currentTimeMillis()
 
-            if (reconnected) {
-                mainHandler.post {
-                    updateStatus("Reconnected! Reading firmware version...")
-                    bluetoothGatt?.requestMtu(512)
+            // Wait for disconnect first
+            while (System.currentTimeMillis() - startTime < maxWaitMs) {
+                val device = bleService?.devices?.values?.firstOrNull {
+                    it.address == (targetDeviceAddress ?: bleService?.selectedDeviceAddress)
                 }
-            } else {
-                mainHandler.post {
-                    awaitingReconnect = false
-                    updateStatus("Update likely successful but device didn't reconnect in time")
+                if (device == null || !device.connected) break
+                Thread.sleep(pollIntervalMs)
+            }
+
+            mainHandler.post { updateStatus("Device rebooting, waiting for reconnection...") }
+
+            // Now wait for reconnect
+            while (System.currentTimeMillis() - startTime < maxWaitMs) {
+                val device = bleService?.devices?.values?.firstOrNull {
+                    it.address == (targetDeviceAddress ?: bleService?.selectedDeviceAddress) && it.connected
                 }
+                if (device != null && device.gatt != null) {
+                    bluetoothGatt = device.gatt
+                    mainHandler.post {
+                        updateStatus("Reconnected! Reading firmware version...")
+                        bluetoothGatt?.requestMtu(512)
+                    }
+                    return@execute
+                }
+                Thread.sleep(pollIntervalMs)
+            }
+
+            // Timeout
+            mainHandler.post {
+                awaitingReconnect = false
+                updateStatus("Update likely successful but device didn't reconnect in time")
             }
         }
     }
