@@ -43,6 +43,7 @@ class GattConnectionManager(
         fun onDescriptorWrite(descriptor: BluetoothGattDescriptor, status: Int)
         fun onMtuChanged(mtu: Int)
         fun onReadRemoteRssi(rssi: Int) {}
+        fun onConnectionStateChange(device: VapeDevice, connected: Boolean) {}
     }
 
     var gattEventListener: GattEventListener? = null
@@ -207,9 +208,15 @@ class GattConnectionManager(
                     statusNotifier.updateStatus("Connected to ${vapeDevice.name}. Discovering services...")
                     gatt.discoverServices()
                     statusNotifier.broadcastDevicesChanged()
+                    if (vapeDevice.address == selectedDeviceAddress) {
+                        gattEventListener?.onConnectionStateChange(vapeDevice, true)
+                    }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.d(TAG, "Disconnected from ${vapeDevice.name} (${vapeDevice.address})")
+                    if (vapeDevice.address == selectedDeviceAddress) {
+                        gattEventListener?.onConnectionStateChange(vapeDevice, false)
+                    }
                     stateTracker.handleDisconnection(vapeDevice)
                     vapeDevice.connected = false
                     vapeDevice.gatt?.close()
