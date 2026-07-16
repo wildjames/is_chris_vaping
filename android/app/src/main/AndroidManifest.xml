@@ -36,6 +36,11 @@
         <activity
             android:name=".OtaUpdateActivity"
             android:exported="false" />
+
+        <service
+            android:name=".DfuService"
+            android:exported="false" />
+
     </application>
 
 </manifest>
