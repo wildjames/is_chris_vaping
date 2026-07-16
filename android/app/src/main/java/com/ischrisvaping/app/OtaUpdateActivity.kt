@@ -178,6 +178,7 @@ class OtaUpdateActivity : AppCompatActivity() {
                 Log.d(TAG, "Device board variant: $variant")
                 mainHandler.post {
                     variantText.text = "Board variant: $variant"
+                    fetchServerFirmwareInfo()
                     // Now read version (BLE only allows one read at a time)
                     @SuppressLint("MissingPermission")
                     if (otaVersionChar != null) {
@@ -239,8 +240,6 @@ class OtaUpdateActivity : AppCompatActivity() {
         // Bind to the existing BLE service
         updateStatus("Connecting to BLE service...")
         bindService(Intent(this, BleService::class.java), serviceConnection, BIND_AUTO_CREATE)
-
-        fetchServerFirmwareInfo()
     }
 
     @SuppressLint("MissingPermission")
@@ -261,6 +260,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         connectedDevice.boardVariant?.let {
             deviceBoardVariant = it
             variantText.text = "Board variant: $it"
+            fetchServerFirmwareInfo()
         }
 
         val gatt = connectedDevice.gatt
