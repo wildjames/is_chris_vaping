@@ -160,7 +160,8 @@ void bluetoothInit() {
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
     Bluefruit.Advertising.addService(vapeSvc);
-    Bluefruit.Advertising.setScanResponse(true);
+    Bluefruit.ScanResponse.addName();
+    Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(160, 1600);  // 100 ms fast / 1 s slow
     Bluefruit.Advertising.setFastTimeout(30);
     Bluefruit.Advertising.start(0);  // advertise until connected
