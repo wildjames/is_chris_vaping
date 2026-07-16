@@ -311,11 +311,27 @@ def firmware_latest():
         ).scalars().first()
         if not fw:
             return jsonify({"error": "No firmware available"}), 404
+
+        # Compute size and checksum from the actual file on disk so the
+        # metadata can never go stale if the file is replaced outside the
+        # upload endpoint.
+        firmware_path = FIRMWARE_DIR / f"firmware-{variant}.bin"
+        if firmware_path.is_file():
+            file_size = firmware_path.stat().st_size
+            hasher = hashlib.sha256()
+            with firmware_path.open("rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            file_hash = hasher.hexdigest()
+        else:
+            file_size = fw.size
+            file_hash = fw.sha256
+
         return jsonify({
             "version": fw.version,
             "variant": fw.variant,
-            "size": fw.size,
-            "sha256": fw.sha256,
+            "size": file_size,
+            "sha256": file_hash,
             "uploaded_at": fw.uploaded_at.isoformat() if fw.uploaded_at else None,
         }), 200
     finally:
@@ -366,11 +382,16 @@ def firmware_upload():
     file.save(firmware_path)
 
     file_size = firmware_path.stat().st_size
-    hasher = hashlib.sha256()
-    with firmware_path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    file_hash = hasher.hexdigest()
+    hasher = hashlib.sha256()
+
+    with firmware_path.open("rb") as f:
+
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+
+            hasher.update(chunk)
+
+    file_hash = hasher.hexdigest()
+
     now = datetime.now(timezone.utc)
 
     session = Session()
