@@ -40,7 +40,6 @@ jobs:
             PATCH) PATCH=$((PATCH + 1)) ;;
           esac
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          sed -i "s/<dev>/$NEW_VERSION/" firmware/nrf52840/src/version.h
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up Python 3.12
@@ -53,6 +52,8 @@ jobs:
 
       - name: Build firmware (nrf52840)
         working-directory: firmware/nrf52840
+        env:
+          PLATFORMIO_BUILD_FLAGS: -DFIRMWARE_VERSION='"${{ steps.version.outputs.version }}"'
         run: pio run -e nrf52840
 
       - name: Package nRF52840 DFU zip
