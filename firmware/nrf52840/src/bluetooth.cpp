@@ -92,6 +92,18 @@ static void pairCompleteCallback(uint16_t conn_hdl, uint8_t auth_status) {
     BLEConnection* conn = Bluefruit.Connection(conn_hdl);
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         Serial.printf("Paired successfully, bonded=%d\n", conn->bonded());
+
+        // Enforce single-phone pairing: only one phone may be bonded at a
+        // time.  Load the just-saved bond keys, wipe all peripheral bonds,
+        // then re-save only this peer's keys.  On reconnection with an
+        // existing bond the AUTH_STATUS event (and this callback) does NOT
+        // fire, so legitimate reconnects are unaffected.
+        bond_keys_t keys;
+        if (conn->loadBondKey(&keys)) {
+            bond_clear_prph();
+            conn->saveBondKey(&keys);
+            Serial.println("Enforced single bond: cleared other peers");
+        }
     } else {
         Serial.printf("Pairing failed, status=0x%02X\n", auth_status);
     }
