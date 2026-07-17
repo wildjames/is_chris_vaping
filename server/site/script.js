@@ -109,23 +109,30 @@ setInterval(() => {
     });
 }, 100);
 
-document.getElementById("btn-sound").addEventListener("click", () => {
-  const audio = document.getElementById("bg-audio");
-  const btn = document.getElementById("btn-sound");
-  soundEnabled = !soundEnabled;
-  if (soundEnabled) {
-    audio.play();
-    btn.textContent = "🔊";
-    btn.title = "Disable sound";
-  } else {
-    btn.textContent = "🔇";
-    btn.title = "Enable sound";
-  }
-  updateAudioMute();
-});
+const soundBtn = document.getElementById("btn-sound");
+if (soundBtn) {
+  soundBtn.addEventListener("click", () => {
+    const audio = document.getElementById("bg-audio");
+    if (!audio) return;
+
+    soundEnabled = !soundEnabled;
+    if (soundEnabled) {
+      audio.play().catch(() => {});
+      soundBtn.textContent = "🔊";
+      soundBtn.title = "Disable sound";
+      soundBtn.setAttribute("aria-label", "Disable sound");
+    } else {
+      soundBtn.textContent = "🔇";
+      soundBtn.title = "Enable sound";
+      soundBtn.setAttribute("aria-label", "Enable sound");
+    }
+    updateAudioMute();
+  });
+}
 
 function updateAudioMute() {
   const audio = document.getElementById("bg-audio");
+  if (!audio) return;
   audio.muted = !soundEnabled || !currentlyVaping;
 }
 
