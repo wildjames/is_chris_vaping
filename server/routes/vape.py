@@ -22,7 +22,11 @@ def vape_update():
     coil = data.get("coil")
     event = data.get("event")
     vape_name = data.get("vape_name", "default")
-
+    if not isinstance(vape_name, str):
+        return jsonify({"error": "vape_name must be a string"}), 400
+    vape_name = vape_name.strip() or "default"
+    if len(vape_name) > 64:
+        return jsonify({"error": "vape_name too long (max 64)"}), 400
     if coil not in ("coil_a", "coil_b"):
         return jsonify({"error": "Invalid coil, must be coil_a or coil_b"}), 400
     if event not in ("started", "stopped"):
