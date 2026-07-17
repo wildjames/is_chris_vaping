@@ -11,7 +11,7 @@ BLEService        vapeSvc(SERVICE_UUID);
 BLECharacteristic coilChar(CHARACTERISTIC_UUID);
 BLECharacteristic nameChar(NAME_CHARACTERISTIC_UUID);
 
-// OTA DFU service — Nordic DFU protocol; update via nRF Connect or similar
+// OTA DFU service - Nordic DFU protocol; update via nRF Connect or similar
 static BLEDfu bledfu;
 
 // Shared state
@@ -88,6 +88,19 @@ static void disconnectCallback(uint16_t conn_hdl, uint8_t reason) {
     Bluefruit.Advertising.start(0);
 }
 
+static void pairCompleteCallback(uint16_t conn_hdl, uint8_t auth_status) {
+    BLEConnection* conn = Bluefruit.Connection(conn_hdl);
+    if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
+        Serial.printf("Paired successfully, bonded=%d\n", conn->bonded());
+    } else {
+        Serial.printf("Pairing failed, status=0x%02X\n", auth_status);
+    }
+}
+
+static void securedCallback(uint16_t conn_hdl) {
+    Serial.printf("Connection secured (encrypted), conn_hdl=%d\n", conn_hdl);
+}
+
 static void nameWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr,
                                uint8_t* data, uint16_t len) {
     (void)conn_hdl;
@@ -126,8 +139,18 @@ void bluetoothInit() {
 
     Bluefruit.begin();
     Bluefruit.setName("IsChrisVaping");
-    // TX power +4 dBm — decent range while staying within BLE spec
+    // TX power +4 dBm - decent range while staying within BLE spec
     Bluefruit.setTxPower(4);
+
+    // --- BLE Security: enable bonding with "Just Works" pairing ---
+    // This is required for Nordic DFU to work reliably. Without bonding, the
+    // bootloader can't reconnect to phones that use random resolvable addresses
+    // (which is all modern Android/iOS devices). Bonding shares the IRK so the
+    // bootloader can resolve the phone's address after reboot.
+    Bluefruit.Security.setIOCaps(false, false, false);  // No display, no yes/no, no keyboard
+    Bluefruit.Security.setMITM(false);                  // Just Works (no MITM protection)
+    Bluefruit.Security.setPairCompleteCallback(pairCompleteCallback);
+    Bluefruit.Security.setSecuredCallback(securedCallback);
 
     Bluefruit.Periph.setConnectCallback(connectCallback);
     Bluefruit.Periph.setDisconnectCallback(disconnectCallback);
@@ -144,25 +167,26 @@ void bluetoothInit() {
     // Main vape service
     vapeSvc.begin();
 
-    // Coil activity characteristic (notify + read)
+    // Coil activity characteristic (notify + read) - requires encrypted link
+    // so the phone must pair/bond before it can subscribe to notifications.
     coilChar.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
-    coilChar.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
+    coilChar.setPermission(SECMODE_ENC_NO_MITM, SECMODE_NO_ACCESS);
     coilChar.setMaxLen(64);
     coilChar.begin();
     coilChar.write("READY", 5);
 
-    // Device name characteristic (read + write)
+    // Device name characteristic (read + write) - requires encrypted link
     nameChar.setProperties(CHR_PROPS_READ | CHR_PROPS_WRITE);
-    nameChar.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+    nameChar.setPermission(SECMODE_ENC_NO_MITM, SECMODE_ENC_NO_MITM);
     nameChar.setMaxLen(MAX_VAPE_NAME_LEN);
     nameChar.setWriteCallback(nameWriteCallback);
     nameChar.begin();
     nameChar.write(vapeName, strlen(vapeName));
 
-    // OTA service — must be set up before advertising starts
+    // OTA service - must be set up before advertising starts
     otaInit();
 
-    // Advertising — fast for 30 s then slow (saves power during long idle)
+    // Advertising - fast for 30 s then slow (saves power during long idle)
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
     Bluefruit.Advertising.addService(vapeSvc);

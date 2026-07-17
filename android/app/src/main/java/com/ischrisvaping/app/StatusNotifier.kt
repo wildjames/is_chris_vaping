@@ -35,7 +35,7 @@ class StatusNotifier(private val context: Context) {
             "BLE Connection",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Maintains BLE connection to ESP32"
+            description = "Maintains BLE connection to vape device"
         }
         val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(channel)

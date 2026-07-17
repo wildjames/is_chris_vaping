@@ -12,9 +12,8 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "C:/Users/JamesWild/Documents/Personal/IsChrisVaping/firmware/.pio/build/esp32/firmware.elf",
-            "projectEnvName": "esp32",
-            "toolchainBinDir": "C:/Users/JamesWild/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "executable": "C:/Users/JamesWild/Documents/Personal/IsChrisVaping/firmware/.pio/build/nrf52840/firmware.elf",
+            "projectEnvName": "nrf52840",
             "internalConsoleOptions": "openOnSessionStart",
             "preLaunchTask": {
                 "type": "PlatformIO",
@@ -25,18 +24,16 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "C:/Users/JamesWild/Documents/Personal/IsChrisVaping/firmware/.pio/build/esp32/firmware.elf",
-            "projectEnvName": "esp32",
-            "toolchainBinDir": "C:/Users/JamesWild/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "executable": "C:/Users/JamesWild/Documents/Personal/IsChrisVaping/firmware/.pio/build/nrf52840/firmware.elf",
+            "projectEnvName": "nrf52840",
             "internalConsoleOptions": "openOnSessionStart"
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (without uploading)",
-            "executable": "C:/Users/JamesWild/Documents/Personal/IsChrisVaping/firmware/.pio/build/esp32/firmware.elf",
-            "projectEnvName": "esp32",
-            "toolchainBinDir": "C:/Users/JamesWild/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "executable": "C:/Users/JamesWild/Documents/Personal/IsChrisVaping/firmware/.pio/build/nrf52840/firmware.elf",
+            "projectEnvName": "nrf52840",
             "internalConsoleOptions": "openOnSessionStart",
             "loadMode": "manual"
         }
