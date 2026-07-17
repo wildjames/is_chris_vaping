@@ -11,12 +11,20 @@ from werkzeug.security import check_password_hash
 admin_bp = Blueprint("admin", __name__)
 
 
+def _is_allowed_origin(origin):
+    """Allow any *.wildjames.com origin."""
+    from urllib.parse import urlparse
+    parsed = urlparse(origin)
+    host = parsed.hostname or ""
+    return host == "wildjames.com" or host.endswith(".wildjames.com")
+
+
 def require_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             origin = request.headers.get("Origin")
-            if origin and origin != request.host_url.rstrip("/"):
+            if origin and origin != request.host_url.rstrip("/") and not _is_allowed_origin(origin):
                 return jsonify({"error": "CSRF blocked"}), 403
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized"}), 401
