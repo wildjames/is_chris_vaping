@@ -1,6 +1,8 @@
 const STATUS_MAX_EM = 10;
 const STATUS_MIN_PX = 1;
 
+let soundEnabled = false;
+
 let devModeActive = false;
 let devVapeState = false;
 let devModeAvailable = false;
@@ -107,11 +109,42 @@ setInterval(() => {
     });
 }, 100);
 
+const soundBtn = document.getElementById("btn-sound");
+if (soundBtn) {
+  soundBtn.addEventListener("click", () => {
+    const audio = document.getElementById("bg-audio");
+    if (!audio) return;
+
+    soundEnabled = !soundEnabled;
+    if (soundEnabled) {
+      audio.play().catch(() => {});
+      soundBtn.textContent = "🔊";
+      soundBtn.title = "Disable sound";
+      soundBtn.setAttribute("aria-label", "Disable sound");
+    } else {
+      soundBtn.textContent = "🔇";
+      soundBtn.title = "Enable sound";
+      soundBtn.setAttribute("aria-label", "Enable sound");
+    }
+    updateAudioMute();
+  });
+}
+
+function updateAudioMute() {
+  const audio = document.getElementById("bg-audio");
+  if (!audio) return;
+  audio.muted = !soundEnabled || !currentlyVaping;
+}
+
+let currentlyVaping = false;
+
 function chrisIsVaping() {
   const statusText = "Yep";
   setStatusText(statusText);
   document.getElementById("rgb-overlay").classList.add("active");
   startBouncingGifs();
+  currentlyVaping = true;
+  updateAudioMute();
 }
 
 function chrisIsNotVaping() {
@@ -119,6 +152,8 @@ function chrisIsNotVaping() {
   setStatusText(statusText);
   document.getElementById("rgb-overlay").classList.remove("active");
   stopBouncingGifs();
+  currentlyVaping = false;
+  updateAudioMute();
 }
 
 // --- Bouncing GIFs ---

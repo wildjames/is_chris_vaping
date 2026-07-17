@@ -3,8 +3,9 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -42,7 +43,6 @@ GIFS_DIR.mkdir(parents=True, exist_ok=True)
 _gif_extensions = {".gif", ".png", ".jpg", ".jpeg", ".webp"}
 _gif_manifest = [f.name for f in GIFS_DIR.iterdir() if f.suffix.lower() in _gif_extensions]
 (GIFS_DIR / "manifest.json").write_text(json.dumps(_gif_manifest))
-logging.basicConfig(level=logging.INFO)
 
 _db_executor = ThreadPoolExecutor(max_workers=2)
 atexit.register(_db_executor.shutdown, wait=True)
@@ -167,6 +167,91 @@ def db_persist_vape_update(vape_name, coil, event, state, timestamp):
         app.logger.exception("Failed to persist vape update to DB")
 
 
+# --- Watchdog: auto-stop coils if an active device hasn't reported recently ---
+
+def check_stale_devices():
+    """Synthesize stopped events when a device is marked active but hasn't updated recently."""
+    now = datetime.now(timezone.utc)
+    try:
+        devices = cache_get_all_devices()
+    except Exception:
+        app.logger.exception("Watchdog: failed to retrieve devices")
+        return
+
+    for name, state in devices.items():
+        if not (state.get("coil_a") or state.get("coil_b")):
+            continue
+
+        last_updated_str = state.get("last_updated")
+        if not last_updated_str:
+            continue
+        try:
+            last_updated = datetime.fromisoformat(last_updated_str)
+        except (ValueError, TypeError):
+            continue
+        if last_updated.tzinfo is None:
+            last_updated = last_updated.replace(tzinfo=timezone.utc)
+
+        age = (now - last_updated).total_seconds()
+        if age <= VAPE_TIMEOUT_SECONDS:
+            continue
+
+        current_state = dict(state)
+        for coil in ("coil_a", "coil_b"):
+            if not current_state.get(coil):
+                continue
+            app.logger.warning(
+                "Watchdog: %s %s active for %.0fs, synthesizing stopped event",
+                name, coil, age,
+            )
+            current_state[coil] = False
+            current_state["last_event"] = f"{coil}:stopped"
+            current_state["last_updated"] = now.isoformat()
+            cache_set_device(name, current_state)
+            _db_executor.submit(
+                db_persist_vape_update, name, coil, "stopped", current_state.copy(), now
+            )
+
+
+WATCHDOG_LOCK_KEY = f"{REDIS_KEY}:watchdog_lock"
+WATCHDOG_LOCK_TTL_SECONDS = WATCHDOG_INTERVAL_SECONDS + 10
+
+
+def _watchdog_loop(stop_event):
+    while not stop_event.wait(WATCHDOG_INTERVAL_SECONDS):
+        try:
+            lock = redis_client.lock(WATCHDOG_LOCK_KEY, timeout=WATCHDOG_LOCK_TTL_SECONDS)
+
+            acquired = lock.acquire(blocking=False)
+
+            if not acquired:
+                app.logger.debug("Watchdog: another worker holds the lock, skipping")
+                continue
+            try:
+
+                check_stale_devices()
+
+            finally:
+
+                try:
+
+                    lock.release()
+
+                except Exception:
+
+                    app.logger.exception("Watchdog: failed to release lock")
+
+            app.logger.exception("Watchdog loop error")
+
+
+_watchdog_stop = threading.Event()
+_watchdog_thread = threading.Thread(
+    target=_watchdog_loop, args=(_watchdog_stop,), daemon=True, name="vape-watchdog"
+)
+_watchdog_thread.start()
+atexit.register(_watchdog_stop.set)
+
+
 def require_token(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -193,7 +278,16 @@ def vape_update():
     if event not in ("started", "stopped"):
         return jsonify({"error": "Invalid event, must be started or stopped"}), 400
 
-    now = datetime.now(timezone.utc)
+    ts_ms = data.get("timestamp")
+    if ts_ms is not None:
+        try:
+            now = datetime.fromtimestamp(int(ts_ms) / 1000.0, tz=timezone.utc)
+            if now > datetime.now(timezone.utc) + timedelta(seconds=60):
+                return jsonify({"error": "timestamp is too far in the future"}), 400
+        except (ValueError, OverflowError, OSError):
+            return jsonify({"error": "Invalid timestamp"}), 400
+    else:
+        now = datetime.now(timezone.utc)
 
     # Fast path: update Redis cache immediately
     state = cache_get_device(vape_name) or {
