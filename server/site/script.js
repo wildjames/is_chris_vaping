@@ -164,7 +164,7 @@ function updateAudioMute() {
 let currentlyVaping = false;
 
 function showVaping(names) {
-  const lines = names.map(n => `${n} is ripping cotton`);
+  const lines = names.map(n => `${n} chuffmaxxing`);
   setStatusHTML(lines.join("<br>"));
   document.getElementById("rgb-overlay").classList.add("active");
   startBouncingGifs();
