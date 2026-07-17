@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
 
     private var bleService: BleService? = null
     private var serviceBound = false
-    private val serverFirmwareVersions: MutableMap<String, String> = mutableMapOf()
+    private var serverFirmwareVersion: String? = null
     private val executor = Executors.newSingleThreadExecutor()
     private val versionPollHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val versionPollRunnable = object : Runnable {
@@ -94,7 +94,7 @@ class MainActivity : AppCompatActivity() {
             onRename = { device -> showRenameDialog(device) },
             onRemove = { device -> showRemoveDialog(device) },
             onUpdate = { device -> launchOtaUpdate(device) },
-            serverFirmwareVersions = { serverFirmwareVersions }
+            serverFirmwareVersion = { serverFirmwareVersion }
         )
         deviceList.layoutManager = LinearLayoutManager(this)
         deviceList.adapter = deviceAdapter
@@ -143,33 +143,21 @@ class MainActivity : AppCompatActivity() {
                     "${parsed.protocol}://${parsed.host}${if (parsed.port != -1 && parsed.port != parsed.defaultPort) ":${parsed.port}" else ""}"
                 } catch (_: Exception) { return@execute }
 
-                // Fetch firmware version for each known variant
-                val variants = bleService?.devices?.values
-                    ?.mapNotNull { it.boardVariant }
-                    ?.distinct()
-                    ?.ifEmpty { listOf("esp32") }
-                    ?: listOf("esp32")
+                try {
+                    val url = URL("$baseUrl/firmware/latest")
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.connectTimeout = 10000
+                    connection.readTimeout = 10000
 
-                for (variant in variants) {
-                    try {
-                        val url = URL("$baseUrl/firmware/latest?variant=$variant")
-                        val connection = url.openConnection() as HttpURLConnection
-                        connection.requestMethod = "GET"
-                        connection.connectTimeout = 10000
-                        connection.readTimeout = 10000
-
-                        if (connection.responseCode == 200) {
-                            val body = connection.inputStream.bufferedReader().readText()
-                            val json = JSONObject(body)
-                            val version = json.getString("version")
-                            synchronized(serverFirmwareVersions) {
-                                serverFirmwareVersions[variant] = version
-                            }
-                        }
-                        connection.disconnect()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to fetch server firmware version for variant $variant", e)
+                    if (connection.responseCode == 200) {
+                        val body = connection.inputStream.bufferedReader().readText()
+                        val json = JSONObject(body)
+                        serverFirmwareVersion = json.getString("version")
                     }
+                    connection.disconnect()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to fetch server firmware version", e)
                 }
                 runOnUiThread { refreshDeviceList() }
             } catch (e: Exception) {
@@ -282,8 +270,17 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Server Settings")
             .setView(layout)
             .setPositiveButton("Save") { _, _ ->
+                val url = urlInput.text.toString().trim()
+                if (url.isNotBlank() && !url.startsWith("https://")) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Insecure URL")
+                        .setMessage("Server URL must use HTTPS to protect credentials and firmware downloads.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setPositiveButton
+                }
                 prefs.edit()
-                    .putString("server_url", urlInput.text.toString().trim())
+                    .putString("server_url", url)
                     .putString("auth_token", tokenInput.text.toString().trim())
                     .apply()
             }
@@ -321,7 +318,7 @@ class MainActivity : AppCompatActivity() {
         private val onRename: (VapeDevice) -> Unit,
         private val onRemove: (VapeDevice) -> Unit,
         private val onUpdate: (VapeDevice) -> Unit,
-        private val serverFirmwareVersions: () -> Map<String, String>
+        private val serverFirmwareVersion: () -> String?
     ) : RecyclerView.Adapter<DeviceAdapter.ViewHolder>() {
 
         private var items: List<VapeDevice> = emptyList()
@@ -367,8 +364,7 @@ class MainActivity : AppCompatActivity() {
 
             // Show firmware version info
             val deviceVer = device.firmwareVersion
-            val variant = device.boardVariant ?: "esp32"
-            val serverVer = serverFirmwareVersions()[variant]
+            val serverVer = serverFirmwareVersion()
             if (deviceVer != null) {
                 val versionInfo = buildString {
                     append("FW: v$deviceVer")

@@ -1,4 +1,5 @@
 import atexit
+import hashlib
 import json
 import logging
 import os
@@ -42,7 +43,6 @@ GIFS_DIR.mkdir(parents=True, exist_ok=True)
 _gif_extensions = {".gif", ".png", ".jpg", ".jpeg", ".webp"}
 _gif_manifest = [f.name for f in GIFS_DIR.iterdir() if f.suffix.lower() in _gif_extensions]
 (GIFS_DIR / "manifest.json").write_text(json.dumps(_gif_manifest))
-logging.basicConfig(level=logging.INFO)
 
 _db_executor = ThreadPoolExecutor(max_workers=2)
 atexit.register(_db_executor.shutdown, wait=True)
@@ -388,18 +388,33 @@ def health():
 @app.route("/firmware/latest", methods=["GET"])
 def firmware_latest():
     """Returns metadata about the latest firmware version from MariaDB."""
-    variant = request.args.get("variant", "esp32")
     session = Session()
     try:
         fw = session.execute(
-            select(Firmware).where(Firmware.variant == variant).order_by(Firmware.id.desc())
+            select(Firmware).order_by(Firmware.id.desc())
         ).scalars().first()
         if not fw:
             return jsonify({"error": "No firmware available"}), 404
+
+        # Compute size and checksum from the actual file on disk so the
+        # metadata can never go stale if the file is replaced outside the
+        # upload endpoint.
+        firmware_path = FIRMWARE_DIR / "firmware.zip"
+        if firmware_path.is_file():
+            file_size = firmware_path.stat().st_size
+            hasher = hashlib.sha256()
+            with firmware_path.open("rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            file_hash = hasher.hexdigest()
+        else:
+            file_size = fw.size
+            file_hash = fw.sha256
+
         return jsonify({
             "version": fw.version,
-            "variant": fw.variant,
-            "size": fw.size,
+            "size": file_size,
+            "sha256": file_hash,
             "uploaded_at": fw.uploaded_at.isoformat() if fw.uploaded_at else None,
         }), 200
     finally:
@@ -408,12 +423,11 @@ def firmware_latest():
 
 @app.route("/firmware/download", methods=["GET"])
 def firmware_download():
-    """Download the latest firmware binary for a given variant."""
-    variant = request.args.get("variant", "esp32")
+    """Download the latest firmware DFU package (ZIP)."""
     session = Session()
     try:
         fw = session.execute(
-            select(Firmware).where(Firmware.variant == variant).order_by(Firmware.id.desc())
+            select(Firmware).order_by(Firmware.id.desc())
         ).scalars().first()
         if not fw:
             return jsonify({"error": "No firmware available"}), 404
@@ -421,22 +435,20 @@ def firmware_download():
     finally:
         session.close()
 
-    firmware_path = FIRMWARE_DIR / f"firmware-{variant}.bin"
+    firmware_path = FIRMWARE_DIR / "firmware.zip"
     if not firmware_path.is_file():
         return jsonify({"error": "Firmware file missing"}), 404
-    return send_file(firmware_path, mimetype="application/octet-stream",
-                     download_name=f"firmware-{variant}-{version}.bin")
+    return send_file(firmware_path, mimetype="application/zip",
+                     download_name=f"firmware-{version}.zip")
 
 
 @app.route("/firmware/upload", methods=["POST"])
 @require_token
 def firmware_upload():
-    """Upload a new firmware binary. Persists metadata to MariaDB."""
-    version = request.form.get("version")
+    """Upload a new firmware DFU package (ZIP). Persists metadata to MariaDB."""
+    version = request.args.get("version")
     if not version:
-        return jsonify({"error": "version field required"}), 400
-
-    variant = request.form.get("variant", "esp32")
+        return jsonify({"error": "version query parameter required"}), 400
 
     if "file" not in request.files:
         return jsonify({"error": "No file part in request"}), 400
@@ -446,21 +458,49 @@ def firmware_upload():
         return jsonify({"error": "No file selected"}), 400
 
     FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
-    firmware_path = FIRMWARE_DIR / f"firmware-{variant}.bin"
-    file.save(firmware_path)
+    temp_path = FIRMWARE_DIR / "firmware.zip.tmp"
+    firmware_path = FIRMWARE_DIR / "firmware.zip"
+    file.save(temp_path)
 
-    file_size = firmware_path.stat().st_size
+    # Validate that the uploaded file is a valid ZIP with a DFU manifest
+    import zipfile
+    if not zipfile.is_zipfile(temp_path):
+        temp_path.unlink()
+        return jsonify({"error": "Uploaded file is not a valid ZIP"}), 400
+    with zipfile.ZipFile(temp_path, "r") as zf:
+        if "manifest.json" not in zf.namelist():
+            temp_path.unlink()
+            return jsonify({"error": "ZIP missing manifest.json — use adafruit-nrfutil dfu genpkg to create the package"}), 400
+
+    file_size = temp_path.stat().st_size
+    hasher = hashlib.sha256()
+
+    with temp_path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            hasher.update(chunk)
+
+    file_hash = hasher.hexdigest()
+
     now = datetime.now(timezone.utc)
 
+    # Persist metadata to DB first — only replace the served file on success
     session = Session()
     try:
-        session.add(Firmware(version=version, variant=variant, size=file_size, uploaded_at=now))
+        session.add(Firmware(version=version, size=file_size, sha256=file_hash, uploaded_at=now))
         session.commit()
+    except Exception:
+        session.rollback()
+        temp_path.unlink(missing_ok=True)
+        app.logger.exception("Failed to persist firmware metadata to DB")
+        return jsonify({"error": "Database write failed"}), 500
     finally:
         session.close()
 
-    app.logger.info("Firmware uploaded: variant=%s version=%s size=%d", variant, version, file_size)
-    return jsonify({"status": "ok", "version": version, "variant": variant, "size": file_size}), 200
+    # DB commit succeeded — atomically replace the live firmware file
+    temp_path.replace(firmware_path)
+
+    app.logger.info("Firmware uploaded: version=%s size=%d sha256=%s", version, file_size, file_hash)
+    return jsonify({"status": "ok", "version": version, "size": file_size, "sha256": file_hash}), 200
 
 
 @app.route("/dev-config", methods=["GET"])

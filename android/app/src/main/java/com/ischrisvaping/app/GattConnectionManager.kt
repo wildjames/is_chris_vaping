@@ -33,7 +33,6 @@ class GattConnectionManager(
 
         val OTA_SERVICE_UUID: UUID = UUID.fromString("fb1e4001-54ae-4a28-9f74-dfccb248601d")
         val OTA_VERSION_UUID: UUID = UUID.fromString("fb1e4004-54ae-4a28-9f74-dfccb248601d")
-        val OTA_VARIANT_UUID: UUID = UUID.fromString("fb1e4005-54ae-4a28-9f74-dfccb248601d")
     }
 
     interface GattEventListener {
@@ -43,6 +42,7 @@ class GattConnectionManager(
         fun onDescriptorWrite(descriptor: BluetoothGattDescriptor, status: Int)
         fun onMtuChanged(mtu: Int)
         fun onReadRemoteRssi(rssi: Int) {}
+        fun onConnectionStateChange(device: VapeDevice, connected: Boolean) {}
     }
 
     var gattEventListener: GattEventListener? = null
@@ -207,9 +207,15 @@ class GattConnectionManager(
                     statusNotifier.updateStatus("Connected to ${vapeDevice.name}. Discovering services...")
                     gatt.discoverServices()
                     statusNotifier.broadcastDevicesChanged()
+                    if (vapeDevice.address == selectedDeviceAddress) {
+                        gattEventListener?.onConnectionStateChange(vapeDevice, true)
+                    }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.d(TAG, "Disconnected from ${vapeDevice.name} (${vapeDevice.address})")
+                    if (vapeDevice.address == selectedDeviceAddress) {
+                        gattEventListener?.onConnectionStateChange(vapeDevice, false)
+                    }
                     stateTracker.handleDisconnection(vapeDevice)
                     vapeDevice.connected = false
                     vapeDevice.gatt?.close()
@@ -255,7 +261,7 @@ class GattConnectionManager(
                 gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             }
 
-            // Read the device name from the ESP32
+            // Read the device name from the firmware
             val nameChar = service.getCharacteristic(NAME_CHARACTERISTIC_UUID)
             if (nameChar != null) {
                 mainHandler.postDelayed({ gatt.readCharacteristic(nameChar) }, NAME_READ_DELAY_MS)
@@ -266,12 +272,6 @@ class GattConnectionManager(
             val versionChar = otaService?.getCharacteristic(OTA_VERSION_UUID)
             if (versionChar != null) {
                 mainHandler.postDelayed({ gatt.readCharacteristic(versionChar) }, VERSION_READ_DELAY_MS)
-            }
-
-            // Read board variant from OTA service
-            val variantChar = otaService?.getCharacteristic(OTA_VARIANT_UUID)
-            if (variantChar != null) {
-                mainHandler.postDelayed({ gatt.readCharacteristic(variantChar) }, VERSION_READ_DELAY_MS + 500L)
             }
 
             statusNotifier.updateStatus(statusNotifier.getOverallStatus(deviceRepository.devices.values))
@@ -287,7 +287,7 @@ class GattConnectionManager(
                 if (characteristic.uuid == NAME_CHARACTERISTIC_UUID) {
                     val name = value.toString(Charsets.UTF_8).trim()
                     if (name.isNotEmpty() && name != vapeDevice.name) {
-                        Log.d(TAG, "Read device name from ESP32: $name (was: ${vapeDevice.name})")
+                        Log.d(TAG, "Read device name from device: $name (was: ${vapeDevice.name})")
                         vapeDevice.name = name
                         deviceRepository.save()
                         statusNotifier.broadcastDevicesChanged()
@@ -297,13 +297,6 @@ class GattConnectionManager(
                     if (version.isNotEmpty()) {
                         Log.d(TAG, "Read firmware version from ${vapeDevice.name}: $version")
                         vapeDevice.firmwareVersion = version
-                        statusNotifier.broadcastDevicesChanged()
-                    }
-                } else if (characteristic.uuid == OTA_VARIANT_UUID) {
-                    val variant = value.toString(Charsets.UTF_8).trim()
-                    if (variant.isNotEmpty()) {
-                        Log.d(TAG, "Read board variant from ${vapeDevice.name}: $variant")
-                        vapeDevice.boardVariant = variant
                         statusNotifier.broadcastDevicesChanged()
                     }
                 } else if (characteristic.uuid == CHARACTERISTIC_UUID) {

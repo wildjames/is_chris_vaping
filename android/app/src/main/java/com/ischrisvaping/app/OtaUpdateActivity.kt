@@ -15,14 +15,17 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
+import android.net.Uri
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.Executors
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.Semaphore
-import java.util.concurrent.TimeUnit
+import no.nordicsemi.android.dfu.DfuProgressListenerAdapter
+import no.nordicsemi.android.dfu.DfuServiceInitiator
+import no.nordicsemi.android.dfu.DfuServiceListenerHelper
 
 class OtaUpdateActivity : AppCompatActivity() {
 
@@ -30,29 +33,12 @@ class OtaUpdateActivity : AppCompatActivity() {
         private const val TAG = "OtaUpdate"
 
         val OTA_SERVICE_UUID: UUID = UUID.fromString("fb1e4001-54ae-4a28-9f74-dfccb248601d")
-        val OTA_CONTROL_UUID: UUID = UUID.fromString("fb1e4002-54ae-4a28-9f74-dfccb248601d")
-        val OTA_DATA_UUID: UUID = UUID.fromString("fb1e4003-54ae-4a28-9f74-dfccb248601d")
         val OTA_VERSION_UUID: UUID = UUID.fromString("fb1e4004-54ae-4a28-9f74-dfccb248601d")
-        val OTA_VARIANT_UUID: UUID = UUID.fromString("fb1e4005-54ae-4a28-9f74-dfccb248601d")
-        val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
-        private const val OTA_CMD_BEGIN: Byte = 0x01
-        private const val OTA_CMD_END: Byte = 0x02
-        private const val OTA_CMD_ABORT: Byte = 0x03
-
-        private const val OTA_RSP_READY: Byte = 0x10
-        private const val OTA_RSP_OK: Byte = 0x11
-        private const val OTA_RSP_ERROR: Byte = 0x12
-        private const val OTA_RSP_ACK: Byte = 0x13
-
-        private const val CHUNK_SIZE = 509 // MTU 512 - 3 bytes ATT overhead
-        private const val ACK_INTERVAL = 50 // Must match ESP32 OTA_ACK_INTERVAL
     }
 
     private lateinit var statusText: TextView
     private lateinit var versionText: TextView
     private lateinit var serverVersionText: TextView
-    private lateinit var variantText: TextView
     private lateinit var rssiText: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var progressText: TextView
@@ -61,24 +47,53 @@ class OtaUpdateActivity : AppCompatActivity() {
     private var bleService: BleService? = null
     private var serviceBound = false
     private var bluetoothGatt: BluetoothGatt? = null
-    private var otaControlChar: BluetoothGattCharacteristic? = null
-    private var otaDataChar: BluetoothGattCharacteristic? = null
     private var otaVersionChar: BluetoothGattCharacteristic? = null
-    private var otaVariantChar: BluetoothGattCharacteristic? = null
 
     private var firmwareData: ByteArray? = null
     private var isUpdating = false
     private var mtuSize = 23
     private var deviceFirmwareVersion: String? = null
     private var serverFirmwareVersion: String? = null
-    private var deviceBoardVariant: String = "esp32"
+    private var serverFirmwareSha256: String? = null
     private var awaitingReconnect = false
     private var targetDeviceAddress: String? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val responseQueue = LinkedBlockingQueue<ByteArray>()
-    private val writeSemaphore = Semaphore(0)
-    @Volatile private var lastWriteStatus: Int = BluetoothGatt.GATT_SUCCESS
+
+    private val dfuProgressListener = object : DfuProgressListenerAdapter() {
+        override fun onEnablingDfuMode(deviceAddress: String) {
+            mainHandler.post { updateStatus("Enabling DFU mode...") }
+        }
+        override fun onDfuProcessStarted(deviceAddress: String) {
+            mainHandler.post { updateStatus("DFU transfer in progress...") }
+        }
+        override fun onFirmwareValidating(deviceAddress: String) {
+            mainHandler.post { updateStatus("Validating firmware...") }
+        }
+        override fun onProgressChanged(deviceAddress: String, percent: Int, speed: Float, avgSpeed: Float, currentPart: Int, partsTotal: Int) {
+            mainHandler.post {
+                progressBar.progress = percent
+                progressText.text = "$percent%"
+            }
+        }
+        override fun onDfuCompleted(deviceAddress: String) {
+            DfuServiceListenerHelper.unregisterProgressListener(this@OtaUpdateActivity, this)
+            isUpdating = false
+            mainHandler.post {
+                progressBar.progress = 100
+                progressText.text = "Complete!"
+                waitForReconnect()
+            }
+        }
+        override fun onError(deviceAddress: String, error: Int, errorType: Int, message: String) {
+            DfuServiceListenerHelper.unregisterProgressListener(this@OtaUpdateActivity, this)
+            isUpdating = false
+            mainHandler.post {
+                updateStatus("DFU error: $message (code $error)")
+                startUpdateButton.isEnabled = true
+            }
+        }
+    }
     private val executor = Executors.newSingleThreadExecutor()
 
     private val rssiRunnable = object : Runnable {
@@ -107,9 +122,6 @@ class OtaUpdateActivity : AppCompatActivity() {
 
     private val gattEventListener = object : GattConnectionManager.GattEventListener {
         override fun onCharacteristicChanged(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-            if (characteristic.uuid == OTA_CONTROL_UUID) {
-                responseQueue.offer(value)
-            }
         }
 
         override fun onCharacteristicRead(characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
@@ -130,32 +142,15 @@ class OtaUpdateActivity : AppCompatActivity() {
                         checkUpdateAvailable()
                     }
                 }
-            } else if (characteristic.uuid == OTA_VARIANT_UUID && status == BluetoothGatt.GATT_SUCCESS) {
-                val variant = value.toString(Charsets.UTF_8)
-                deviceBoardVariant = variant
-                Log.d(TAG, "Device board variant: $variant")
-                mainHandler.post {
-                    variantText.text = "Board variant: $variant"
-                    // Now read version (BLE only allows one read at a time)
-                    @SuppressLint("MissingPermission")
-                    if (otaVersionChar != null) {
-                        bluetoothGatt?.readCharacteristic(otaVersionChar)
-                    }
-                }
             }
         }
 
         override fun onCharacteristicWrite(characteristic: BluetoothGattCharacteristic, status: Int) {
-            lastWriteStatus = status
-            writeSemaphore.release()
         }
 
         @SuppressLint("MissingPermission")
         override fun onDescriptorWrite(descriptor: BluetoothGattDescriptor, status: Int) {
-            // Descriptor write completed - read variant first, then version
-            if (otaVariantChar != null) {
-                bluetoothGatt?.readCharacteristic(otaVariantChar)
-            } else if (otaVersionChar != null) {
+            if (otaVersionChar != null) {
                 bluetoothGatt?.readCharacteristic(otaVersionChar)
             }
         }
@@ -180,7 +175,6 @@ class OtaUpdateActivity : AppCompatActivity() {
         statusText = findViewById(R.id.otaStatusText)
         versionText = findViewById(R.id.otaVersionText)
         serverVersionText = findViewById(R.id.otaServerVersionText)
-        variantText = findViewById(R.id.otaVariantText)
         rssiText = findViewById(R.id.otaRssiText)
         progressBar = findViewById(R.id.otaProgressBar)
         progressText = findViewById(R.id.otaProgressText)
@@ -197,8 +191,6 @@ class OtaUpdateActivity : AppCompatActivity() {
         // Bind to the existing BLE service
         updateStatus("Connecting to BLE service...")
         bindService(Intent(this, BleService::class.java), serviceConnection, BIND_AUTO_CREATE)
-
-        fetchServerFirmwareInfo()
     }
 
     @SuppressLint("MissingPermission")
@@ -215,11 +207,7 @@ class OtaUpdateActivity : AppCompatActivity() {
         }
         bleService?.selectedDeviceAddress = connectedDevice.address
 
-        // Use previously-read variant if available
-        connectedDevice.boardVariant?.let {
-            deviceBoardVariant = it
-            variantText.text = "Board variant: $it"
-        }
+        fetchServerFirmwareInfo()
 
         val gatt = connectedDevice.gatt
         if (gatt == null) {
@@ -248,22 +236,10 @@ class OtaUpdateActivity : AppCompatActivity() {
             return
         }
 
-        otaControlChar = otaService.getCharacteristic(OTA_CONTROL_UUID)
-        otaDataChar = otaService.getCharacteristic(OTA_DATA_UUID)
         otaVersionChar = otaService.getCharacteristic(OTA_VERSION_UUID)
-        otaVariantChar = otaService.getCharacteristic(OTA_VARIANT_UUID)
 
-        // Enable notifications on control characteristic
-        gatt.setCharacteristicNotification(otaControlChar, true)
-        val descriptor = otaControlChar?.getDescriptor(CCCD_UUID)
-        if (descriptor != null) {
-            // Version read will be triggered in onDescriptorWrite callback
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-        } else {
-            // No descriptor to write, read version directly
-            if (otaVersionChar != null) {
-                gatt.readCharacteristic(otaVersionChar)
-            }
+        if (otaVersionChar != null) {
+            gatt.readCharacteristic(otaVersionChar)
         }
 
         updateStatus("Connected to device")
@@ -279,6 +255,10 @@ class OtaUpdateActivity : AppCompatActivity() {
         // Strip the path (e.g. /vape-update) to get the base URL
         return if (url.isNotBlank()) {
             val parsed = URL(url)
+            if (parsed.protocol != "https") {
+                Log.e(TAG, "Server URL must use HTTPS")
+                return ""
+            }
             "${parsed.protocol}://${parsed.host}${if (parsed.port != -1 && parsed.port != parsed.defaultPort) ":${parsed.port}" else ""}"
         } else ""
     }
@@ -292,7 +272,7 @@ class OtaUpdateActivity : AppCompatActivity() {
                     return@execute
                 }
 
-                val url = URL("$baseUrl/firmware/latest?variant=$deviceBoardVariant")
+                val url = URL("$baseUrl/firmware/latest")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 10000
@@ -303,8 +283,9 @@ class OtaUpdateActivity : AppCompatActivity() {
                     val body = connection.inputStream.bufferedReader().readText()
                     val json = JSONObject(body)
                     serverFirmwareVersion = json.getString("version")
+                    serverFirmwareSha256 = json.optString("sha256", null)
                     // Log the server firmware version for debugging
-                    Log.d(TAG, "Server firmware version for variant $deviceBoardVariant: $serverFirmwareVersion")
+                    Log.d(TAG, "Server firmware version: $serverFirmwareVersion")
                     mainHandler.post {
                         serverVersionText.text = "Server firmware: v$serverFirmwareVersion"
                         checkUpdateAvailable()
@@ -326,24 +307,34 @@ class OtaUpdateActivity : AppCompatActivity() {
         executor.execute {
             try {
                 val baseUrl = getServerBaseUrl()
-                val url = URL("$baseUrl/firmware/download?variant=$deviceBoardVariant")
+                val url = URL("$baseUrl/firmware/download")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000
                 connection.readTimeout = 30000
 
                 if (connection.responseCode == 200) {
+                    val digest = MessageDigest.getInstance("SHA-256")
                     val buffer = ByteArrayOutputStream()
                     val data = ByteArray(8192)
                     var bytesRead: Int
                     connection.inputStream.use { input ->
                         while (input.read(data).also { bytesRead = it } != -1) {
                             buffer.write(data, 0, bytesRead)
+                            digest.update(data, 0, bytesRead)
                         }
                     }
                     val firmware = buffer.toByteArray()
-                    Log.d(TAG, "Downloaded firmware: ${firmware.size} bytes")
-                    mainHandler.post { onComplete(firmware) }
+                    val downloadedHash = digest.digest().joinToString("") { "%02x".format(it) }
+                    Log.d(TAG, "Downloaded firmware: ${firmware.size} bytes, SHA-256: $downloadedHash")
+
+                    val expectedHash = serverFirmwareSha256
+                    if (expectedHash != null && downloadedHash != expectedHash) {
+                        Log.e(TAG, "Checksum mismatch! Expected: $expectedHash, got: $downloadedHash")
+                        mainHandler.post { onComplete(null) }
+                    } else {
+                        mainHandler.post { onComplete(firmware) }
+                    }
                 } else {
                     Log.e(TAG, "Download failed: ${connection.responseCode}")
                     mainHandler.post { onComplete(null) }
@@ -359,7 +350,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     private fun checkUpdateAvailable() {
         val deviceVer = deviceFirmwareVersion
         val serverVer = serverFirmwareVersion
-        if (deviceVer != null && serverVer != null && otaControlChar != null) {
+        if (deviceVer != null && serverVer != null) {
             if (deviceVer != serverVer) {
                 startUpdateButton.isEnabled = true
                 updateStatus("Update available: v$deviceVer → v$serverVer")
@@ -383,221 +374,51 @@ class OtaUpdateActivity : AppCompatActivity() {
                 return@downloadFirmware
             }
             firmwareData = data
-            updateStatus("Downloaded ${data.size} bytes. Starting BLE transfer...")
-            performBleUpdate()
+            updateStatus("Downloaded ${data.size} bytes. Starting Nordic DFU...")
+            performNordicDfuUpdate(data)
         }
     }
 
-    private fun performBleUpdate() {
-        val data = firmwareData ?: return
-        val gatt = bluetoothGatt ?: return
-        val controlChar = otaControlChar ?: return
-        val dataChar = otaDataChar ?: return
+    private fun performNordicDfuUpdate(data: ByteArray) {
+        val address = targetDeviceAddress ?: bleService?.selectedDeviceAddress ?: run {
+            updateStatus("No device address for DFU")
+            startUpdateButton.isEnabled = true
+            return
+        }
+
+        val tempFile = File(cacheDir, "firmware_dfu.zip")
+        try {
+            tempFile.writeBytes(data)
+        } catch (e: Exception) {
+            updateStatus("Failed to save firmware: ${e.message}")
+            startUpdateButton.isEnabled = true
+            return
+        }
 
         isUpdating = true
+        DfuServiceListenerHelper.registerProgressListener(this, dfuProgressListener)
+        updateStatus("Starting Nordic DFU transfer...")
 
-        executor.execute {
-            val maxAttempts = 3
-            var lastError: Exception? = null
+        // Disconnect the app's GATT connection before starting DFU.
+        // The DFU library manages its own connection lifecycle and will fail
+        // if another GATT client is already connected to the device.
+        bleService?.disconnectDevice(address)
+        bluetoothGatt = null
 
-            for (attempt in 1..maxAttempts) {
-                try {
-                    if (attempt > 1) {
-                        Log.w(TAG, "Retrying OTA transfer (attempt $attempt/$maxAttempts)")
-                        mainHandler.post {
-                            updateStatus("Retry $attempt/$maxAttempts...")
-                            progressBar.progress = 0
-                        }
-                        // Brief delay before retry to let ESP32 settle
-                        Thread.sleep(2000)
-                    }
-                    transferFirmware(gatt, controlChar, dataChar, data)
-                    lastError = null
-                    break
-                } catch (e: Exception) {
-                    Log.e(TAG, "OTA attempt $attempt failed", e)
-                    lastError = e
-                    // Send ABORT so ESP32 resets OTA state for retry
-                    try {
-                        writeSemaphore.drainPermits()
-                        gatt.writeCharacteristic(controlChar, byteArrayOf(OTA_CMD_ABORT), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-                        writeSemaphore.tryAcquire(3, TimeUnit.SECONDS)
-                    } catch (_: Exception) { }
-                    responseQueue.clear()
-                }
-            }
-
-            if (lastError != null) {
-                mainHandler.post {
-                    updateStatus("Update failed after $maxAttempts attempts: ${lastError.message}")
-                    isUpdating = false
-                    startUpdateButton.isEnabled = true
-                }
-            }
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun transferFirmware(
-        gatt: BluetoothGatt,
-        controlChar: BluetoothGattCharacteristic,
-        dataChar: BluetoothGattCharacteristic,
-        firmware: ByteArray
-    ) {
-        responseQueue.clear()
-
-        // Send BEGIN command with file size (little-endian)
-        val size = firmware.size
-        val beginCmd = byteArrayOf(
-            OTA_CMD_BEGIN,
-            (size and 0xFF).toByte(),
-            ((size shr 8) and 0xFF).toByte(),
-            ((size shr 16) and 0xFF).toByte(),
-            ((size shr 24) and 0xFF).toByte()
-        )
-
-        gatt.writeCharacteristic(controlChar, beginCmd, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-
-        // Wait for READY response
-        val readyResponse = responseQueue.poll(10, TimeUnit.SECONDS)
-        if (readyResponse == null || readyResponse[0] != OTA_RSP_READY) {
-            val errorMsg = if (readyResponse != null && readyResponse[0] == OTA_RSP_ERROR) {
-                "Device rejected update (error code: ${readyResponse.getOrNull(1) ?: "unknown"})"
-            } else {
-                "No response from device"
-            }
-            throw Exception(errorMsg)
-        }
-
-        mainHandler.post { updateStatus("Transferring firmware...") }
-
-        // Send firmware data in chunks with flow control
-        val chunkSize = minOf(CHUNK_SIZE, mtuSize - 3)
-        var offset = 0
-        var chunksSent = 0
-
-        val maxRetries = 10
-
-        while (offset < size) {
-            val end = minOf(offset + chunkSize, size)
-            val chunk = firmware.copyOfRange(offset, end)
-
-            var written = false
-            for (attempt in 1..maxRetries) {
-                writeSemaphore.drainPermits()
-                lastWriteStatus = BluetoothGatt.GATT_SUCCESS
-                gatt.writeCharacteristic(dataChar, chunk, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
-
-                // Wait for write completion callback before sending next chunk
-                if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
-                    throw Exception("BLE write timed out at offset $offset")
-                }
-
-                if (lastWriteStatus == BluetoothGatt.GATT_SUCCESS) {
-                    written = true
-                    break
-                }
-                Log.w(TAG, "BLE write failed (status=$lastWriteStatus) at offset $offset, attempt $attempt/$maxRetries")
-            }
-
-            if (!written) {
-                throw Exception("BLE write failed after $maxRetries retries at offset $offset (status=$lastWriteStatus)")
-            }
-
-            offset = end
-            chunksSent++
-
-            // Update progress
-            val progress = (offset * 100) / size
-            mainHandler.post {
-                progressBar.progress = progress
-                progressText.text = "${offset / 1024}KB / ${size / 1024}KB ($progress%)"
-            }
-
-            // Every ACK_INTERVAL chunks, wait for ACK from ESP32 with byte count verification
-            if (chunksSent % ACK_INTERVAL == 0) {
-                val ack = responseQueue.poll(10, TimeUnit.SECONDS)
-                if (ack == null) {
-                    throw Exception("No ACK from device after $chunksSent chunks (offset $offset)")
-                }
-                if (ack[0] == OTA_RSP_ERROR) {
-                    throw Exception("Device reported error during transfer (code: ${ack.getOrNull(1) ?: "unknown"})")
-                }
-                if (ack[0] == OTA_RSP_ACK && ack.size >= 5) {
-                    val deviceReceived = (ack[1].toInt() and 0xFF) or
-                            ((ack[2].toInt() and 0xFF) shl 8) or
-                            ((ack[3].toInt() and 0xFF) shl 16) or
-                            ((ack[4].toInt() and 0xFF) shl 24)
-                    if (deviceReceived != offset) {
-                        throw Exception("Dropped packets: sent $offset bytes but device received $deviceReceived")
-                    }
-                    Log.d(TAG, "ACK verified: $deviceReceived bytes received by device")
-                }
-            } else {
-                // Non-blocking check for error notifications between ACK intervals
-                val notification = responseQueue.poll()
-                if (notification != null && notification[0] == OTA_RSP_ERROR) {
-                    throw Exception("Device reported error during transfer (code: ${notification.getOrNull(1) ?: "unknown"})")
-                }
-            }
-        }
-
-        mainHandler.post { updateStatus("Transfer complete, verifying...") }
-
-        // Drain any stale notifications before sending END
-        while (responseQueue.poll() != null) { /* discard */ }
-
-        // Send END command - device will reboot on success, which may disconnect BLE
-        // before we get a response, so treat connection failures here as likely success
-        try {
-            writeSemaphore.drainPermits()
-            gatt.writeCharacteristic(controlChar, byteArrayOf(OTA_CMD_END), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-            if (!writeSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
-                Log.w(TAG, "END command write timed out - device likely rebooted")
-                mainHandler.post {
-                    progressBar.progress = 100
-                    progressText.text = "Complete!"
-                }
-                isUpdating = false
-                waitForReconnect()
-                return
-            }
-
-            // Wait for OK response (device will reboot after this)
-            val endResponse = responseQueue.poll(10, TimeUnit.SECONDS)
-            if (endResponse != null && endResponse[0] == OTA_RSP_OK) {
-                mainHandler.post {
-                    progressBar.progress = 100
-                    progressText.text = "Complete!"
-                }
-                isUpdating = false
-                waitForReconnect()
-            } else if (endResponse != null && endResponse[0] == OTA_RSP_ERROR) {
-                throw Exception("Verification failed on device (code: ${endResponse.getOrNull(1) ?: "unknown"})")
-            } else {
-                // No response - device likely already rebooted (success)
-                Log.w(TAG, "No END response - device likely rebooted")
-                mainHandler.post {
-                    progressBar.progress = 100
-                    progressText.text = "Complete!"
-                }
-                isUpdating = false
-                waitForReconnect()
-            }
-        } catch (e: Exception) {
-            // If the exception is from the END phase and not an explicit device error,
-            // the device most likely rebooted after a successful update
-            if (e.message?.contains("Verification failed") == true) {
-                throw e
-            }
-            Log.w(TAG, "END phase failed (device likely rebooted): ${e.message}")
-            mainHandler.post {
-                progressBar.progress = 100
-                progressText.text = "Complete!"
-            }
-            isUpdating = false
-            waitForReconnect()
-        }
+        DfuServiceInitiator(address)
+            .setDeviceName("IsChrisVaping")
+            .setZip(Uri.fromFile(tempFile))
+            // The Adafruit nRF52 bootloader advertises on a different BLE
+            // address (original +1). Tell the DFU library to scan for the
+            // bootloader instead of connecting to the original address.
+            .setForceScanningForNewAddressInLegacyDfu(true)
+            // Retry on flaky BLE disconnections
+            .setNumberOfRetries(3)
+            // The Adafruit bootloader requires PRN ≤ 8 or it runs out of
+            // buffer space and drops packets.
+            .setPacketsReceiptNotificationsEnabled(true)
+            .setPacketsReceiptNotificationsValue(8)
+            .start(this, DfuService::class.java)
     }
 
     private fun updateRssiDisplay(rssi: Int) {
@@ -669,14 +490,7 @@ class OtaUpdateActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         mainHandler.removeCallbacks(rssiRunnable)
-        if (isUpdating) {
-            val controlChar = otaControlChar
-            if (controlChar != null && bluetoothGatt != null) {
-                bluetoothGatt?.writeCharacteristic(
-                    controlChar, byteArrayOf(OTA_CMD_ABORT), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                )
-            }
-        }
+        DfuServiceListenerHelper.unregisterProgressListener(this, dfuProgressListener)
         bleService?.gattEventListener = null
         bleService?.selectedDeviceAddress = null
         if (serviceBound) {

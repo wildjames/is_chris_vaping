@@ -1,87 +1,76 @@
 # IsChrisVaping Firmware
 
-ESP32 firmware using PlatformIO with combined Arduino + ESP-IDF framework. This enables ESP-IDF sdkconfig control (power management, BLE modem sleep) while keeping Arduino libraries.
+Seeed XIAO nRF52840 firmware using PlatformIO + Arduino framework (Seeed nRF52 Boards / Adafruit-derived).
 
-## Prerequisites
+## Power states
 
-- **Python 3.12** (Python 3.13+ breaks ESP-IDF tooling)
-- **PlatformIO Core** installed in the Python 3.12 environment
+| State | Trigger | Avg. current | BLE |
+|-------|---------|-------------|-----|
+| Active | coil firing or recently active | ~50–200 µA | connected |
+| Light sleep | 60 s idle | ~10–50 µA | **connected** (FreeRTOS blocks loop; SoftDevice runs) |
+| System OFF | 30 min idle | ~1–5 µA | lost — re-advertises after reset |
 
-### Setup (one-time)
+Timeouts are `LIGHT_SLEEP_TIMEOUT_MS` and `DEEP_SLEEP_TIMEOUT_MS` in `nrf52840/src/sleep.h`.
+
+### Prerequisites
+
+- **PlatformIO Core** (any supported Python version — no ESP-IDF quirks)
 
 ```powershell
-conda create -n py312 python=3.12 -y
-conda activate py312
 pip install platformio
 ```
 
-## Building
+### Building
 
 ```powershell
-cd firmware
-conda activate py312
-$env:IDF_COMPONENT_MANAGER = "0"
-pio run -e esp32
+cd firmware/nrf52840
+pio run -e nrf52840
 ```
 
-> `IDF_COMPONENT_MANAGER=0` is required to work around a Python compatibility issue in `idf_component_manager`.
+### Flashing
 
-## Flashing
+Connect the XIAO via USB-C. Double-tap the reset button if it doesn't appear as a serial port.
 
 ```powershell
-$env:IDF_COMPONENT_MANAGER = "0"
-pio run -e esp32 -t upload
+cd firmware/nrf52840
+pio run -e nrf52840 -t upload
 ```
 
-For the 4MB dev kit (no external 32kHz crystal):
-
-```powershell
-$env:IDF_COMPONENT_MANAGER = "0"
-pio run -e esp32_4mb -t upload
-```
-
-The board is configured to upload via COM10. Change `upload_port` in `platformio.ini` if your board is on a different port.
-
-To see what COM port your board is on, run:
+To find the port:
 
 ```powershell
 pio device list
 ```
 
-## Serial Monitor
+### Serial monitor
 
 ```powershell
-pio device monitor --port COM10 --baud 115200
+pio device monitor --baud 115200
 ```
 
-## Configuration
+### OTA (firmware update over BLE)
 
-### sdkconfig.esp32
+The firmware exposes a Nordic DFU service. Flash updates wirelessly using the **nRF Connect** app (iOS/Android):
 
-This is the ESP-IDF configuration file that PlatformIO actually uses (it looks for `sdkconfig.<env_name>`). Key settings:
+1. Build a new binary: `pio run -e nrf52840`
+2. Copy `.pio/build/nrf52840/firmware.hex` to your phone
+3. In nRF Connect → connect to *IsChrisVaping* → DFU → select the `.hex` file
 
-- **Bluetooth:** BLE-only mode with Bluedroid stack
-- **Power Management:** `CONFIG_PM_ENABLE=y` with tickless idle for automatic light sleep
-- **RTC Clock:** External 32.768kHz crystal (`CONFIG_ESP32_RTC_CLK_SRC_EXT_CRYS=y`)
-- **BT Modem Sleep:** Maintains BLE connection during light sleep using the external crystal
-- **Arduino:** `CONFIG_AUTOSTART_ARDUINO=y` enables `setup()`/`loop()` entry point
+### Configuration
 
-### platformio.ini
+Key constants:
 
-- `framework = arduino, espidf` — combined mode, recompiles ESP-IDF from source
-- `lib_extra_dirs` — points to the Arduino framework's built-in libraries (for BLE)
-- `build_flags = -DCONFIG_AUTOSTART_ARDUINO=1` — ensures Arduino's `app_main()` wrapper is compiled
+| File | Constant | Default | Effect |
+|------|----------|---------|--------|
+| `src/sleep.h` | `LIGHT_SLEEP_TIMEOUT_MS` | 60 000 ms | Idle time before light sleep |
+| `src/sleep.h` | `DEEP_SLEEP_TIMEOUT_MS` | 1 800 000 ms | Idle time before System OFF |
+| `src/bluetooth.h` | `DEFAULT_VAPE_NAME` | `"My Vape"` | Name prefix for first-boot default |
 
-### sdkconfig.defaults
-
-Contains desired non-default settings. Note: PlatformIO doesn't reliably pass this to CMake's confgen in combined mode. If you need to change ESP-IDF settings, edit `sdkconfig.esp32` directly, or delete it and let it regenerate (then re-apply BT settings).
-
-## Troubleshooting
+### Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
-| `idf_component_manager` crash | Set `$env:IDF_COMPONENT_MANAGER = "0"` |
-| JSON parsing error in espidf.py | Use Python 3.12, not 3.13+ |
-| BLE types not found (`BLEServer` etc.) | Ensure `CONFIG_BT_ENABLED=y` and `CONFIG_BT_BLUEDROID_ENABLED=y` in `sdkconfig.esp32` |
-| `undefined reference to app_main` | Ensure `CONFIG_AUTOSTART_ARDUINO=y` in `sdkconfig.esp32` |
-| Build uses stale config after changes | Delete `.pio/build/esp32/` and rebuild |
+| Board not detected | Double-tap reset to enter UF2 bootloader mode |
+| Build fails on first run | PlatformIO downloads the Seeed nRF52 core (~200 MB); allow time |
+| BLE not advertising after System OFF wake | Expected — full reset occurs; advertising starts automatically |
+| `xSemaphoreCreateBinary` linker error | Ensure `framework = arduino` in `platformio.ini` (not mbed) |

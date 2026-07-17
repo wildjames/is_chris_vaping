@@ -133,6 +133,11 @@ class BleService : Service() {
         statusNotifier.broadcastDevicesChanged()
     }
 
+    /** Disconnect a single device's GATT connection without removing it. */
+    fun disconnectDevice(address: String) {
+        connectionManager.disconnectDevice(address)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         connectionManager.disconnectAll()

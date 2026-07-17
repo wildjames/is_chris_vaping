@@ -9,6 +9,5 @@ data class VapeDevice(
     var coilAActive: Boolean = false,
     var coilBActive: Boolean = false,
     var connected: Boolean = false,
-    var firmwareVersion: String? = null,
-    var boardVariant: String? = null
+    var firmwareVersion: String? = null
 )
