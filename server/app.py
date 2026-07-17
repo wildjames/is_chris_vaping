@@ -167,10 +167,12 @@ def db_persist_vape_update(vape_name, coil, event, state, timestamp):
         app.logger.exception("Failed to persist vape update to DB")
 
 
-# --- Watchdog: auto-stop coils if an active device hasn't reported recently ---
+# --- Watchdog: auto-stop coils if an active device hasn't reported recently ---
+
 
 def check_stale_devices():
-    """Synthesize stopped events when a device is marked active but hasn't updated recently."""
+    """Synthesize stopped events when a device is marked active but hasn't updated recently."""
+
     now = datetime.now(timezone.utc)
     try:
         devices = cache_get_all_devices()
@@ -221,26 +223,18 @@ def _watchdog_loop(stop_event):
     while not stop_event.wait(WATCHDOG_INTERVAL_SECONDS):
         try:
             lock = redis_client.lock(WATCHDOG_LOCK_KEY, timeout=WATCHDOG_LOCK_TTL_SECONDS)
-
             acquired = lock.acquire(blocking=False)
-
             if not acquired:
                 app.logger.debug("Watchdog: another worker holds the lock, skipping")
                 continue
             try:
-
                 check_stale_devices()
-
             finally:
-
                 try:
-
                     lock.release()
-
                 except Exception:
-
                     app.logger.exception("Watchdog: failed to release lock")
-
+        except Exception:
             app.logger.exception("Watchdog loop error")
 
 
