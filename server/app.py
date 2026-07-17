@@ -394,19 +394,25 @@ def firmware_upload():
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             hasher.update(chunk)
 
-    # Validation passed — atomically replace the live firmware file
-    temp_path.replace(firmware_path)
-
     file_hash = hasher.hexdigest()
 
     now = datetime.now(timezone.utc)
 
+    # Persist metadata to DB first — only replace the served file on success
     session = Session()
     try:
         session.add(Firmware(version=version, size=file_size, sha256=file_hash, uploaded_at=now))
         session.commit()
+    except Exception:
+        session.rollback()
+        temp_path.unlink(missing_ok=True)
+        app.logger.exception("Failed to persist firmware metadata to DB")
+        return jsonify({"error": "Database write failed"}), 500
     finally:
         session.close()
+
+    # DB commit succeeded — atomically replace the live firmware file
+    temp_path.replace(firmware_path)
 
     app.logger.info("Firmware uploaded: version=%s size=%d sha256=%s", version, file_size, file_hash)
     return jsonify({"status": "ok", "version": version, "size": file_size, "sha256": file_hash}), 200
