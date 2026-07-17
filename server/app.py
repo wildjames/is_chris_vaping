@@ -373,25 +373,29 @@ def firmware_upload():
         return jsonify({"error": "No file selected"}), 400
 
     FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = FIRMWARE_DIR / "firmware.zip.tmp"
     firmware_path = FIRMWARE_DIR / "firmware.zip"
-    file.save(firmware_path)
+    file.save(temp_path)
 
     # Validate that the uploaded file is a valid ZIP with a DFU manifest
     import zipfile
-    if not zipfile.is_zipfile(firmware_path):
-        firmware_path.unlink()
+    if not zipfile.is_zipfile(temp_path):
+        temp_path.unlink()
         return jsonify({"error": "Uploaded file is not a valid ZIP"}), 400
-    with zipfile.ZipFile(firmware_path, "r") as zf:
+    with zipfile.ZipFile(temp_path, "r") as zf:
         if "manifest.json" not in zf.namelist():
-            firmware_path.unlink()
+            temp_path.unlink()
             return jsonify({"error": "ZIP missing manifest.json — use adafruit-nrfutil dfu genpkg to create the package"}), 400
 
-    file_size = firmware_path.stat().st_size
+    file_size = temp_path.stat().st_size
     hasher = hashlib.sha256()
 
-    with firmware_path.open("rb") as f:
+    with temp_path.open("rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             hasher.update(chunk)
+
+    # Validation passed — atomically replace the live firmware file
+    temp_path.replace(firmware_path)
 
     file_hash = hasher.hexdigest()
 
