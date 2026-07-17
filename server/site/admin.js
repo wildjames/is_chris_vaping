@@ -91,9 +91,11 @@
                 '<td>' + lastUpdated + '</td>' +
                 '<td>' + d.event_count + '</td>' +
                 '<td>' +
-                    '<button class="btn-view" data-id="' + d.id + '" data-name="' + escapeHtml(d.name) + '">Events</button>' +
-                    '<button class="btn-delete" data-id="' + d.id + '" data-name="' + escapeHtml(d.name) + '">Delete</button>' +
+                    '<button class="btn-view" data-id="' + d.id + '">Events</button>' +
+                    '<button class="btn-delete" data-id="' + d.id + '">Delete</button>' +
                 '</td>';
+            tr.querySelector('.btn-view').dataset.name = d.name;
+            tr.querySelector('.btn-delete').dataset.name = d.name;
             tbody.appendChild(tr);
         });
 
