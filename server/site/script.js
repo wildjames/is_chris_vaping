@@ -2,6 +2,7 @@ const STATUS_MAX_EM = 10;
 const STATUS_MIN_PX = 1;
 
 let soundEnabled = true;
+let audioStarted = false;
 
 let devModeActive = false;
 let devVapeState = false;
@@ -109,15 +110,28 @@ setInterval(() => {
     });
 }, 100);
 
+function tryStartAudio() {
+  if (audioStarted) return;
+  const audio = document.getElementById("bg-audio");
+  if (!audio) return;
+  audio.play().then(() => {
+    audioStarted = true;
+    updateAudioMute();
+    document.removeEventListener("click", tryStartAudio);
+    document.removeEventListener("touchstart", tryStartAudio);
+    document.removeEventListener("keydown", tryStartAudio);
+  }).catch(() => {});
+}
+
+document.addEventListener("click", tryStartAudio);
+document.addEventListener("touchstart", tryStartAudio);
+document.addEventListener("keydown", tryStartAudio);
+
 const soundBtn = document.getElementById("btn-sound");
 if (soundBtn) {
   soundBtn.addEventListener("click", () => {
-    const audio = document.getElementById("bg-audio");
-    if (!audio) return;
-
     soundEnabled = !soundEnabled;
     if (soundEnabled) {
-      audio.play().catch(() => {});
       soundBtn.textContent = "🔊";
       soundBtn.title = "Disable sound";
       soundBtn.setAttribute("aria-label", "Disable sound");
