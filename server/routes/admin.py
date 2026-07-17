@@ -14,6 +14,10 @@ admin_bp = Blueprint("admin", __name__)
 def require_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            origin = request.headers.get("Origin")
+            if origin and origin != request.host_url.rstrip("/"):
+                return jsonify({"error": "CSRF blocked"}), 403
         if not session.get("admin"):
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
