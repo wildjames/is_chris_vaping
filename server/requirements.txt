@@ -5,3 +5,4 @@ Pillow==12.1.*
 redis==8.*
 SQLAlchemy==2.*
 pymysql==1.*
+Werkzeug>=3.0
