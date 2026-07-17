@@ -217,9 +217,19 @@ def check_stale_devices():
             )
 
 
+WATCHDOG_LOCK_KEY = f"{REDIS_KEY}:watchdog_lock"
+WATCHDOG_LOCK_TTL_SECONDS = WATCHDOG_INTERVAL_SECONDS + 10
+
+
 def _watchdog_loop(stop_event):
     while not stop_event.wait(WATCHDOG_INTERVAL_SECONDS):
         try:
+            acquired = redis_client.set(
+                WATCHDOG_LOCK_KEY, "1", nx=True, ex=WATCHDOG_LOCK_TTL_SECONDS
+            )
+            if not acquired:
+                app.logger.debug("Watchdog: another worker holds the lock, skipping")
+                continue
             check_stale_devices()
         except Exception:
             app.logger.exception("Watchdog loop error")

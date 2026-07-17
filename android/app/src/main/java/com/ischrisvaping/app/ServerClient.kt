@@ -56,7 +56,12 @@ class ServerClient(private val context: Context) {
         val payload = VapeEventPayload(coil, event, vapeName, System.currentTimeMillis())
         httpExecutor.execute {
             flushPendingEvents()
-            if (!trySendVapeEvent(payload, notifyErrors = true)) {
+            val sent = if (pendingEvents.isEmpty()) {
+                trySendVapeEvent(payload, notifyErrors = true)
+            } else {
+                false
+            }
+            if (!sent) {
                 if (!pendingEvents.offerLast(payload)) {
                     // Queue full: drop oldest to make room for the new event
                     pendingEvents.pollFirst()
