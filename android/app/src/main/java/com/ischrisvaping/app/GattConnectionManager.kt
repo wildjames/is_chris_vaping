@@ -16,7 +16,8 @@ import java.util.UUID
 class GattConnectionManager(
     private val deviceRepository: DeviceRepository,
     private val stateTracker: VapeStateTracker,
-    private val statusNotifier: StatusNotifier
+    private val statusNotifier: StatusNotifier,
+    private val serverClient: ServerClient
 ) {
 
     companion object {
@@ -76,7 +77,7 @@ class GattConnectionManager(
             .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
             .build()
 
-        statusNotifier.updateStatus("Scanning for vapes...")
+        statusNotifier.updateStatus(statusNotifier.getOverallStatus(deviceRepository.devices.values))
         bluetoothLeScanner?.startScan(listOf(filter), settings, scanCallback)
         isScanning = true
 
@@ -287,9 +288,11 @@ class GattConnectionManager(
                 if (characteristic.uuid == NAME_CHARACTERISTIC_UUID) {
                     val name = value.toString(Charsets.UTF_8).trim()
                     if (name.isNotEmpty() && name != vapeDevice.name) {
-                        Log.d(TAG, "Read device name from device: $name (was: ${vapeDevice.name})")
+                        val oldName = vapeDevice.name
+                        Log.d(TAG, "Read device name from device: $name (was: $oldName)")
                         vapeDevice.name = name
                         deviceRepository.save()
+                        serverClient.postRenameDevice(oldName, name) {}
                         statusNotifier.broadcastDevicesChanged()
                     }
                 } else if (characteristic.uuid == OTA_VERSION_UUID) {

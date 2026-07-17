@@ -19,7 +19,7 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 REDIS_USERNAME = os.environ.get("REDIS_USERNAME", "")
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
-REDIS_KEY = os.environ.get("REDIS_KEY", "IsChrisVaping")
+REDIS_KEY = os.environ.get("REDIS_KEY", "WhoIsVaping")
 
 DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_PORT = os.environ.get("DB_PORT", "3306")
