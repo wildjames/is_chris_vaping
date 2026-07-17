@@ -57,7 +57,7 @@ class BleService : Service() {
         serverClient = ServerClient(this)
         stateTracker = VapeStateTracker(serverClient)
         statusNotifier = StatusNotifier(this)
-        connectionManager = GattConnectionManager(deviceRepository, stateTracker, statusNotifier)
+        connectionManager = GattConnectionManager(deviceRepository, stateTracker, statusNotifier, serverClient)
 
         statusNotifier.createNotificationChannel()
         deviceRepository.load()

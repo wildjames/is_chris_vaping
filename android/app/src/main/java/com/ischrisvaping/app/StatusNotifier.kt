@@ -49,7 +49,7 @@ class StatusNotifier(private val context: Context) {
         )
 
         val builder = Notification.Builder(context, CHANNEL_ID)
-            .setContentTitle("IsChrisVaping")
+            .setContentTitle("WhoIsVaping")
             .setContentText(content)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(pendingIntent)
@@ -101,17 +101,18 @@ class StatusNotifier(private val context: Context) {
 
     fun getOverallStatus(devices: Collection<VapeDevice>): String {
         val vapingDevices = devices.filter { it.coilAActive || it.coilBActive }
-        val connectedCount = devices.count { it.connected }
-        val totalCount = devices.size
+        val connectedDevices = devices.filter { it.connected }
 
         return when {
             vapingDevices.isNotEmpty() -> {
                 val names = vapingDevices.joinToString(", ") { it.name }
-                "Chris is vaping ($names)"
+                "Chuffing $names"
             }
-            connectedCount > 0 -> "Not vaping ($connectedCount/$totalCount connected)"
-            totalCount > 0 -> "Searching for devices..."
-            else -> "No devices configured"
+            connectedDevices.isNotEmpty() -> {
+                val names = connectedDevices.joinToString(", ") { it.name }
+                "Connected to $names"
+            }
+            else -> "Scanning for vapes"
         }
     }
 }

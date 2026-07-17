@@ -169,12 +169,12 @@ class MainActivity : AppCompatActivity() {
     private fun showRenameDialog(device: VapeDevice) {
         val input = EditText(this).apply {
             setText(device.name)
-            hint = "Vape name"
+            hint = "Person's name"
             setPadding(48, 32, 48, 16)
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Rename Vape")
+            .setTitle("Rename Device")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
                 val newName = input.text.toString().trim()

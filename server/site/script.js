@@ -23,27 +23,28 @@ function fitStatusText() {
   }
 
   statusElement.style.fontSize = `${maxFontSizePx}px`;
+  statusElement.style.whiteSpace = "nowrap";
 
   if (statusElement.scrollWidth > availableWidth) {
     const scale = availableWidth / statusElement.scrollWidth;
     const fittedFontSizePx = Math.max(STATUS_MIN_PX, Math.floor(maxFontSizePx * scale));
     statusElement.style.fontSize = `${fittedFontSizePx}px`;
   }
+
+  statusElement.style.whiteSpace = "";
 }
 
-function setStatusText(text) {
+function setStatusHTML(html) {
   const statusElement = document.getElementById("status_par");
   if (!statusElement) {
     return;
   }
 
-  if (statusElement.textContent === text) {
-
+  if (statusElement.innerHTML === html) {
     return;
-
   }
 
-  statusElement.textContent = text;
+  statusElement.innerHTML = html;
   fitStatusText();
 }
 
@@ -83,10 +84,20 @@ function initDevControls() {
 
 function applyDevState() {
   if (devVapeState) {
-    chrisIsVaping();
+    showVaping(["Dev User"]);
   } else {
-    chrisIsNotVaping();
+    showNobodyVaping();
   }
+}
+
+function getActiveVapers(devices) {
+  const vapers = [];
+  for (const [name, state] of Object.entries(devices || {})) {
+    if (state.coil_a || state.coil_b) {
+      vapers.push(name);
+    }
+  }
+  return vapers;
 }
 
 setInterval(() => {
@@ -95,18 +106,18 @@ setInterval(() => {
   fetch("/vape-status")
     .then(response => response.json())
     .then(data => {
-      let isVaping = data.is_vaping;
-      if (isVaping) {
-        chrisIsVaping();
+      const vapers = getActiveVapers(data.devices);
+      if (vapers.length > 0) {
+        showVaping(vapers);
       } else {
-        chrisIsNotVaping();
+        showNobodyVaping();
       }
 
       const debugElement = document.getElementById("debug_par");
       if (debugElement) debugElement.textContent = JSON.stringify(data);
     })
     .catch(error => {
-        setStatusText("Failed to fetch vape status.");
+        setStatusHTML("Failed to fetch vape status.");
     });
 }, 100);
 
@@ -152,18 +163,17 @@ function updateAudioMute() {
 
 let currentlyVaping = false;
 
-function chrisIsVaping() {
-  const statusText = "Yep";
-  setStatusText(statusText);
+function showVaping(names) {
+  const lines = names.map(n => `${n} is ripping cotton`);
+  setStatusHTML(lines.join("<br>"));
   document.getElementById("rgb-overlay").classList.add("active");
   startBouncingGifs();
   currentlyVaping = true;
   updateAudioMute();
 }
 
-function chrisIsNotVaping() {
-  const statusText = "Nope";
-  setStatusText(statusText);
+function showNobodyVaping() {
+  setStatusHTML("Nobody");
   document.getElementById("rgb-overlay").classList.remove("active");
   stopBouncingGifs();
   currentlyVaping = false;

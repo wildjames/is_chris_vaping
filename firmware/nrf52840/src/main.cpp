@@ -20,7 +20,7 @@ void setup() {
     sleepInit();
 
     lastActivityTime = millis();
-    Serial.printf("IsChrisVaping nRF52 firmware %s ready\n", FIRMWARE_VERSION);
+    Serial.printf("WhoIsVaping nRF52 firmware %s ready\n", FIRMWARE_VERSION);
 }
 
 void loop() {
