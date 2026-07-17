@@ -1,7 +1,7 @@
 const STATUS_MAX_EM = 10;
 const STATUS_MIN_PX = 1;
 
-let soundEnabled = false;
+let soundEnabled = true;
 
 let devModeActive = false;
 let devVapeState = false;
