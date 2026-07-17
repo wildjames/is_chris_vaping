@@ -11,8 +11,10 @@ from routes.firmware import firmware_bp
 from routes.vape import vape_bp
 
 app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="")
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
-
+_secret_key = os.environ.get("FLASK_SECRET_KEY")
+if not _secret_key and not DEV_MODE:
+    raise RuntimeError("FLASK_SECRET_KEY must be set in non-dev mode")
+app.secret_key = _secret_key or secrets.token_hex(32)
 logging.basicConfig(level=logging.INFO)
 
 # Update gifs manifest on startup
