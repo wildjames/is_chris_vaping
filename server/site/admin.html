@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - IsChrisVaping</title>
+    <link rel="stylesheet" href="admin.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+            integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+            crossorigin="anonymous"></script>
+</head>
+<body>
+    <!-- Login -->
+    <div class="login-container" id="login-container">
+        <div class="login-box">
+            <h1>&#128274; Admin Dashboard</h1>
+            <form id="login-form">
+                <label for="password-input" class="visually-hidden">Admin password</label>
+                <input type="password" id="password-input" placeholder="Enter admin password" autocomplete="current-password">
+                <button type="submit">Login</button>
+            </form>
+            <p class="login-error" id="login-error"></p>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard">
+        <header>
+            <h1>IsChrisVaping Admin</h1>
+            <button id="logout-btn">Logout</button>
+        </header>
+        <div class="container">
+            <!-- Stats -->
+            <div class="stats-row" id="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-devices">-</div>
+                    <div class="stat-label">Devices</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-active">-</div>
+                    <div class="stat-label">Currently Active</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-events-today">-</div>
+                    <div class="stat-label">Events Today</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-events-total">-</div>
+                    <div class="stat-label">Total Events (7d)</div>
+                </div>
+            </div>
+
+            <!-- Activity Chart -->
+            <div class="card">
+                <h2>Vape Activity</h2>
+                <div class="chart-controls">
+                    <select id="chart-days">
+                        <option value="1">Last 24 hours</option>
+                        <option value="7" selected>Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                    </select>
+                    <select id="chart-device">
+                        <option value="">All Devices</option>
+                    </select>
+                    <button id="chart-refresh">Refresh</button>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="activity-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Per-device chart -->
+            <div class="card">
+                <h2>Events by Device</h2>
+                <div class="chart-wrapper chart-wrapper--short">
+                    <canvas id="device-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Device Management -->
+            <div class="card">
+                <h2>Device Management</h2>
+                <div class="table-scroll">
+                    <table class="device-table">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Name</th>
+                                <th>Last Event</th>
+                                <th>Last Updated</th>
+                                <th>Events</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="device-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Events Modal -->
+    <div class="modal-overlay" id="events-modal">
+        <div class="modal">
+            <button class="modal-close" id="modal-close">&times;</button>
+            <h2 id="modal-title">Device Events</h2>
+            <ul class="events-list" id="events-list"></ul>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

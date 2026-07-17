@@ -13,6 +13,8 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=vape
       - DEV_MODE=true
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
     volumes:
       - firmware_data:/firmware
       - ./server/site:/app/site
