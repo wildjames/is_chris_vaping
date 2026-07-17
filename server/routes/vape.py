@@ -74,9 +74,20 @@ def device_rename():
     old_name = data.get("old_name")
     new_name = data.get("new_name")
 
+    if not isinstance(new_name, str):
+        return jsonify({"error": "new_name must be a string"}), 400
+    new_name = new_name.strip()
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
+    if len(new_name) > 64:
+        return jsonify({"error": "new_name too long (max 64)"}), 400
 
+    if old_name is not None:
+        if not isinstance(old_name, str):
+            return jsonify({"error": "old_name must be a string"}), 400
+        old_name = old_name.strip() or None
+        if old_name and len(old_name) > 64:
+            return jsonify({"error": "old_name too long (max 64)"}), 400
     session = Session()
     try:
         device = None
