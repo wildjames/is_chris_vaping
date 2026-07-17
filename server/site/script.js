@@ -1,7 +1,7 @@
 const STATUS_MAX_EM = 10;
 const STATUS_MIN_PX = 1;
 
-let soundEnabled = false;
+let soundEnabled = true;
 
 let devModeActive = false;
 let devVapeState = false;
@@ -163,7 +163,7 @@ let gifList = null;
 
 const GIF_SIZE = 100;
 const MIN_SPEED = 1;
-const MAX_SPEED = 4;
+const MAX_SPEED = 7;
 
 async function loadGifList() {
   if (gifList !== null) return gifList;
