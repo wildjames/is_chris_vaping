@@ -31,6 +31,9 @@ FIRMWARE_DIR = Path(os.environ.get("FIRMWARE_DIR", "/firmware"))
 AUTH_TOKEN = os.environ.get("VAPE_API_TOKEN")
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() in ("1", "true", "yes")
 
+VAPE_TIMEOUT_SECONDS = int(os.environ.get("VAPE_TIMEOUT_SECONDS", "120"))
+WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("WATCHDOG_INTERVAL_SECONDS", "5"))
+
 
 SITE_DIR = Path(__file__).resolve().parent / "site"
 
