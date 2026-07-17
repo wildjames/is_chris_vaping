@@ -163,7 +163,7 @@ let gifList = null;
 
 const GIF_SIZE = 100;
 const MIN_SPEED = 1;
-const MAX_SPEED = 4;
+const MAX_SPEED = 7;
 
 async function loadGifList() {
   if (gifList !== null) return gifList;
