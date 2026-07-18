@@ -8,13 +8,13 @@ Seeed XIAO nRF52840 firmware using PlatformIO + Arduino framework (Seeed nRF52 B
 |-------|---------|-------------|-----|
 | Active | coil firing or recently active | ~50–200 µA | connected |
 | Light sleep | 60 s idle | ~10–50 µA | **connected** (FreeRTOS blocks loop; SoftDevice runs) |
-| System OFF | 30 min idle | ~1–5 µA | lost — re-advertises after reset |
+| System OFF | 30 min idle | ~1–5 µA | lost - re-advertises after reset |
 
 Timeouts are `LIGHT_SLEEP_TIMEOUT_MS` and `DEEP_SLEEP_TIMEOUT_MS` in `nrf52840/src/sleep.h`.
 
 ### Prerequisites
 
-- **PlatformIO Core** (any supported Python version — no ESP-IDF quirks)
+- **PlatformIO Core** (any supported Python version - no ESP-IDF quirks)
 
 ```powershell
 pip install platformio
@@ -72,5 +72,5 @@ Key constants:
 |-------|-----|
 | Board not detected | Double-tap reset to enter UF2 bootloader mode |
 | Build fails on first run | PlatformIO downloads the Seeed nRF52 core (~200 MB); allow time |
-| BLE not advertising after System OFF wake | Expected — full reset occurs; advertising starts automatically |
+| BLE not advertising after System OFF wake | Expected - full reset occurs; advertising starts automatically |
 | `xSemaphoreCreateBinary` linker error | Ensure `framework = arduino` in `platformio.ini` (not mbed) |
