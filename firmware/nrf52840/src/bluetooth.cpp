@@ -92,18 +92,6 @@ static void pairCompleteCallback(uint16_t conn_hdl, uint8_t auth_status) {
     BLEConnection* conn = Bluefruit.Connection(conn_hdl);
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         Serial.printf("Paired successfully, bonded=%d\n", conn->bonded());
-
-        // Enforce single-phone pairing: only one phone may be bonded at a
-        // time.  Load the just-saved bond keys, wipe all peripheral bonds,
-        // then re-save only this peer's keys.  On reconnection with an
-        // existing bond the AUTH_STATUS event (and this callback) does NOT
-        // fire, so legitimate reconnects are unaffected.
-        bond_keys_t keys;
-        if (conn->loadBondKey(&keys)) {
-            bond_clear_prph();
-            conn->saveBondKey(&keys);
-            Serial.println("Enforced single bond: cleared other peers");
-        }
     } else {
         Serial.printf("Pairing failed, status=0x%02X\n", auth_status);
     }
@@ -111,6 +99,22 @@ static void pairCompleteCallback(uint16_t conn_hdl, uint8_t auth_status) {
 
 static void securedCallback(uint16_t conn_hdl) {
     Serial.printf("Connection secured (encrypted), conn_hdl=%d\n", conn_hdl);
+}
+
+// ---------------------------------------------------------------------------
+// BLE advertised name
+// ---------------------------------------------------------------------------
+
+// BLE GAP device names can be up to 248 bytes, but the scan response
+// payload that carries the complete local name is at most 31 bytes
+// (29 usable after the AD type/length header).  We build
+// "<vapeName>'s Vape" and truncate if necessary.
+#define BLE_ADV_NAME_MAX 29
+static char bleAdvName[BLE_ADV_NAME_MAX + 1];
+
+static void updateBleName() {
+    snprintf(bleAdvName, sizeof(bleAdvName), "%s's Vape", vapeName);
+    Bluefruit.setName(bleAdvName);
 }
 
 static void nameWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr,
@@ -126,8 +130,12 @@ static void nameWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr,
     saveVapeName(name);
     // Reflect the new name back to the characteristic
     nameChar.write(vapeName, strlen(vapeName));
+    // Update the BLE advertised name and restart advertising so scanners
+    // pick up the change after the current connection drops.
+    updateBleName();
     Serial.printf("Name updated via BLE: %s\n", vapeName);
 }
+
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -150,7 +158,7 @@ void bluetoothInit() {
     digitalWrite(LED_RED, HIGH);  // Start off (active-low)
 
     Bluefruit.begin();
-    Bluefruit.setName("IsChrisVaping");
+    updateBleName();
     // TX power +4 dBm - decent range while staying within BLE spec
     Bluefruit.setTxPower(4);
 
@@ -208,6 +216,6 @@ void bluetoothInit() {
     Bluefruit.Advertising.setFastTimeout(30);
     Bluefruit.Advertising.start(0);  // advertise until connected
 
-    Serial.printf("BLE ready. Device: IsChrisVaping, Name: %s, FW: %s\n",
-                  vapeName, FIRMWARE_VERSION);
+    Serial.printf("BLE ready. Device: %s, Name: %s, FW: %s\n",
+                  bleAdvName, vapeName, FIRMWARE_VERSION);
 }
