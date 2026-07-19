@@ -73,7 +73,7 @@ void saveVapeName(const char* name) {
 static void connectCallback(uint16_t conn_hdl) {
     (void)conn_hdl;
     deviceConnected = true;
-    digitalWrite(LED_RED, LOW);  // Active-low: LOW = on
+    digitalWrite(LED_RED, HIGH);  // Active-low: HIGH = off; LED driven by coil activity
     Serial.println("BLE connected");
     // Stop advertising while connected to save power
     Bluefruit.Advertising.stop();

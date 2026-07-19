@@ -37,17 +37,20 @@ static void enterLightSleep() {
     Serial.println("Light sleep (BLE maintained) — waiting for coil activity");
     Serial.flush();
 
+    digitalWrite(LED_RED, HIGH);  // Ensure LED off during sleep
+
     // Consume any stale token before blocking
     xSemaphoreTake(coilWakeSem, 0);
 
     attachInterrupt(digitalPinToInterrupt(getCoilAPin()), coilWakeISR, RISING);
     attachInterrupt(digitalPinToInterrupt(getCoilBPin()), coilWakeISR, RISING);
 
-    // Block this task indefinitely.  The FreeRTOS idle task calls
-    // sd_app_evt_wait() so the CPU sleeps while the SoftDevice keeps the BLE
-    // radio alive and the connection maintained.  The ISR gives the semaphore
-    // and portYIELD_FROM_ISR immediately reschedules the loop task.
-    xSemaphoreTake(coilWakeSem, portMAX_DELAY);
+    // Block until coil activity OR until the deep sleep timeout is reached.
+    // Without a bounded wait the loop would never advance to check the System
+    // OFF condition, leaving the device in light sleep (blue LED flashing)
+    // indefinitely.
+    TickType_t remaining = pdMS_TO_TICKS(DEEP_SLEEP_TIMEOUT_MS - LIGHT_SLEEP_TIMEOUT_MS);
+    xSemaphoreTake(coilWakeSem, remaining);
 
     detachInterrupt(digitalPinToInterrupt(getCoilAPin()));
     detachInterrupt(digitalPinToInterrupt(getCoilBPin()));
@@ -70,6 +73,12 @@ static void powerDownFlash() {
 static void enterSystemOff() {
     Serial.println("System OFF — will hard-reset on coil activity");
     Serial.flush();
+
+    // Stop BLE advertising so the library releases the blue LED
+    Bluefruit.Advertising.stop();
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_GREEN, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
 
     powerDownFlash();
 

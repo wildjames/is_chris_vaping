@@ -79,12 +79,14 @@ static void handleCoilAStarted() {
     notRippedTimerActive = false;
     coilAActive          = true;
     lastActivityTime     = millis();
+    digitalWrite(LED_RED, LOW);  // Active-low: LED on while coil active
     sendBLEMessage(MSG_COIL_A_STARTED);
 }
 
 static void handleCoilAStopped() {
     coilAActive      = false;
     lastActivityTime = millis();
+    if (!coilBActive) digitalWrite(LED_RED, HIGH);  // LED off when both coils idle
     sendBLEMessage(MSG_COIL_A_STOPPED);
     notRippedTimerStart  = millis();
     notRippedTimerActive = true;
@@ -94,12 +96,14 @@ static void handleCoilBStarted() {
     notRippedTimerActive = false;
     coilBActive          = true;
     lastActivityTime     = millis();
+    digitalWrite(LED_RED, LOW);  // Active-low: LED on while coil active
     sendBLEMessage(MSG_COIL_B_STARTED);
 }
 
 static void handleCoilBStopped() {
     coilBActive      = false;
     lastActivityTime = millis();
+    if (!coilAActive) digitalWrite(LED_RED, HIGH);  // LED off when both coils idle
     sendBLEMessage(MSG_COIL_B_STOPPED);
     notRippedTimerStart  = millis();
     notRippedTimerActive = true;
