@@ -69,6 +69,11 @@
   transition: opacity 0.3s;
 }
 
+.rgb-overlay.fading-out {
+  transition: opacity 5s ease-out;
+  opacity: 0;
+}
+
 .gif-bounce-container {
   position: fixed;
   top: 0;
@@ -78,6 +83,13 @@
   pointer-events: none;
   z-index: 9998;
   overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.3s;
+}
+
+.gif-bounce-container.fading-out {
+  transition: opacity 5s ease-out;
+  opacity: 0;
 }
 
 .bouncing-gif {

@@ -162,22 +162,88 @@ function updateAudioMute() {
 }
 
 let currentlyVaping = false;
+let fadeOutTimer = null;
+let fadeOutAudioInterval = null;
+const FADE_OUT_MS = 5000;
+
+function cancelFadeOut() {
+  if (fadeOutTimer !== null) {
+    clearTimeout(fadeOutTimer);
+    fadeOutTimer = null;
+  }
+  if (fadeOutAudioInterval !== null) {
+    clearInterval(fadeOutAudioInterval);
+    fadeOutAudioInterval = null;
+  }
+  const overlay = document.getElementById("rgb-overlay");
+  const container = document.getElementById("gif-bounce-container");
+  overlay.classList.remove("fading-out");
+  container.classList.remove("fading-out");
+}
 
 function showVaping(names) {
+  cancelFadeOut();
   const lines = names.map(n => `${n} chuffmaxxing`);
   setStatusHTML(lines.join("<br>"));
-  document.getElementById("rgb-overlay").classList.add("active");
+  const overlay = document.getElementById("rgb-overlay");
+  overlay.classList.add("active");
+  const container = document.getElementById("gif-bounce-container");
+  container.style.opacity = "";
   startBouncingGifs();
   currentlyVaping = true;
   updateAudioMute();
+  const audio = document.getElementById("bg-audio");
+  if (audio) audio.volume = 1;
 }
 
 function showNobodyVaping() {
+  if (!currentlyVaping && fadeOutTimer === null) {
+    setStatusHTML("Nobody");
+    return;
+  }
+  if (!currentlyVaping) return;
+
   setStatusHTML("Nobody");
-  document.getElementById("rgb-overlay").classList.remove("active");
-  stopBouncingGifs();
   currentlyVaping = false;
-  updateAudioMute();
+
+  // Start fading out RGB overlay
+  const overlay = document.getElementById("rgb-overlay");
+  overlay.classList.add("fading-out");
+  overlay.classList.remove("active");
+
+  // Start fading out GIFs
+  const container = document.getElementById("gif-bounce-container");
+  container.classList.add("fading-out");
+
+  // Fade out audio volume
+  const audio = document.getElementById("bg-audio");
+  if (audio && !audio.muted) {
+    const fadeSteps = 50;
+    const fadeInterval = FADE_OUT_MS / fadeSteps;
+    const volumeStep = audio.volume / fadeSteps;
+    fadeOutAudioInterval = setInterval(() => {
+      if (audio.volume > volumeStep) {
+        audio.volume -= volumeStep;
+      } else {
+        audio.volume = 0;
+        clearInterval(fadeOutAudioInterval);
+        fadeOutAudioInterval = null;
+        audio.muted = true;
+      }
+    }, fadeInterval);
+  }
+
+  // After fade completes, clean up
+  fadeOutTimer = setTimeout(() => {
+    fadeOutTimer = null;
+    stopBouncingGifs();
+    overlay.classList.remove("fading-out");
+    container.classList.remove("fading-out");
+    if (audio) {
+      audio.muted = true;
+      audio.volume = 1;
+    }
+  }, FADE_OUT_MS);
 }
 
 // --- Bouncing GIFs ---
