@@ -54,14 +54,14 @@ jobs:
         working-directory: firmware/nrf52840
         env:
           PLATFORMIO_BUILD_FLAGS: -DFIRMWARE_VERSION='"${{ steps.version.outputs.version }}"'
-        run: pio run -e nrf52840
+        run: pio run -e nrf52840_ota
 
       - name: Package nRF52840 DFU zip
         run: |
           adafruit-nrfutil dfu genpkg \
             --dev-type 0x0052 \
             --sd-req 0xFFFE \
-            --application firmware/nrf52840/.pio/build/nrf52840/firmware.hex \
+            --application firmware/nrf52840/.pio/build/nrf52840_ota/firmware.hex \
             firmware_nrf52840.zip
 
       - name: Upload firmware (nrf52840)

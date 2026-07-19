@@ -1,4 +1,5 @@
 #include "sleep.h"
+#include "config.h"
 #include "coils.h"
 
 #include <bluefruit.h>
@@ -15,13 +16,6 @@ extern unsigned long lastActivityTime;
 // Binary semaphore: given by the coil ISR, taken by the blocked loop task.
 // Created once in sleepInit() and reused across every light-sleep cycle.
 static SemaphoreHandle_t coilWakeSem = NULL;
-
-// ---------------------------------------------------------------------------
-// XIAO nRF52840 coil pin → raw nRF GPIO numbers
-// D0 = P0.02 (nRF GPIO 2), D1 = P0.03 (nRF GPIO 3)
-// ---------------------------------------------------------------------------
-#define COIL_A_NRF_GPIO  2
-#define COIL_B_NRF_GPIO  3
 
 static Adafruit_FlashTransport_QSPI flashTransport;
 
@@ -46,8 +40,8 @@ static void enterLightSleep() {
     // Consume any stale token before blocking
     xSemaphoreTake(coilWakeSem, 0);
 
-    attachInterrupt(digitalPinToInterrupt(COIL_A_PIN), coilWakeISR, RISING);
-    attachInterrupt(digitalPinToInterrupt(COIL_B_PIN), coilWakeISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(getCoilAPin()), coilWakeISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(getCoilBPin()), coilWakeISR, RISING);
 
     // Block this task indefinitely.  The FreeRTOS idle task calls
     // sd_app_evt_wait() so the CPU sleeps while the SoftDevice keeps the BLE
@@ -55,8 +49,8 @@ static void enterLightSleep() {
     // and portYIELD_FROM_ISR immediately reschedules the loop task.
     xSemaphoreTake(coilWakeSem, portMAX_DELAY);
 
-    detachInterrupt(digitalPinToInterrupt(COIL_A_PIN));
-    detachInterrupt(digitalPinToInterrupt(COIL_B_PIN));
+    detachInterrupt(digitalPinToInterrupt(getCoilAPin()));
+    detachInterrupt(digitalPinToInterrupt(getCoilBPin()));
 
     Serial.println("Woke from light sleep");
     // coilsUpdate() on the very next loop() iteration detects the HIGH pin
@@ -81,9 +75,9 @@ static void enterSystemOff() {
 
     // Configure coil pins as high-sense wakeup sources before powering down.
     // GPIO DETECT wakes System OFF with a full chip reset.
-    nrf_gpio_cfg_sense_input(COIL_A_NRF_GPIO, NRF_GPIO_PIN_PULLDOWN,
+    nrf_gpio_cfg_sense_input(getCoilANrfGpio(), NRF_GPIO_PIN_PULLDOWN,
                              NRF_GPIO_PIN_SENSE_HIGH);
-    nrf_gpio_cfg_sense_input(COIL_B_NRF_GPIO, NRF_GPIO_PIN_PULLDOWN,
+    nrf_gpio_cfg_sense_input(getCoilBNrfGpio(), NRF_GPIO_PIN_PULLDOWN,
                              NRF_GPIO_PIN_SENSE_HIGH);
 
     sd_power_system_off();   // never returns
