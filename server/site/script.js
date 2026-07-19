@@ -209,7 +209,6 @@ function showNobodyVaping() {
   // Start fading out RGB overlay
   const overlay = document.getElementById("rgb-overlay");
   overlay.classList.add("fading-out");
-  overlay.classList.remove("active");
 
   // Start fading out GIFs
   const container = document.getElementById("gif-bounce-container");
@@ -238,6 +237,7 @@ function showNobodyVaping() {
     fadeOutTimer = null;
     stopBouncingGifs();
     overlay.classList.remove("fading-out");
+    overlay.classList.remove("active");
     container.classList.remove("fading-out");
     if (audio) {
       audio.muted = true;

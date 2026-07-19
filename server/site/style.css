@@ -69,9 +69,11 @@
   transition: opacity 0.3s;
 }
 
-.rgb-overlay.fading-out {
-  transition: opacity 5s ease-out;
+.rgb-overlay.active.fading-out {
   opacity: 0;
+  transition: opacity 5s ease-out;
+  animation: none;
+  background-color: red;
 }
 
 .gif-bounce-container {
