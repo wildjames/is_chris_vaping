@@ -84,10 +84,11 @@
   z-index: 9998;
   overflow: hidden;
   opacity: 1;
-  transition: opacity 5s ease-out;
+  transition: opacity 0.3s;
 }
 
 .gif-bounce-container.fading-out {
+  transition: opacity 5s ease-out;
   opacity: 0;
 }
 

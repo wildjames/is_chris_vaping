@@ -164,6 +164,7 @@ function updateAudioMute() {
 let currentlyVaping = false;
 let fadeOutTimer = null;
 let fadeOutAudioInterval = null;
+const FADE_OUT_MS = 5000;
 
 function cancelFadeOut() {
   if (fadeOutTimer !== null) {
@@ -214,11 +215,11 @@ function showNobodyVaping() {
   const container = document.getElementById("gif-bounce-container");
   container.classList.add("fading-out");
 
-  // Fade out audio volume over 5 seconds
+  // Fade out audio volume
   const audio = document.getElementById("bg-audio");
   if (audio && !audio.muted) {
     const fadeSteps = 50;
-    const fadeInterval = 5000 / fadeSteps;
+    const fadeInterval = FADE_OUT_MS / fadeSteps;
     const volumeStep = audio.volume / fadeSteps;
     fadeOutAudioInterval = setInterval(() => {
       if (audio.volume > volumeStep) {
@@ -232,7 +233,7 @@ function showNobodyVaping() {
     }, fadeInterval);
   }
 
-  // After 5 seconds, clean up
+  // After fade completes, clean up
   fadeOutTimer = setTimeout(() => {
     fadeOutTimer = null;
     stopBouncingGifs();
@@ -242,7 +243,7 @@ function showNobodyVaping() {
       audio.muted = true;
       audio.volume = 1;
     }
-  }, 5000);
+  }, FADE_OUT_MS);
 }
 
 // --- Bouncing GIFs ---
