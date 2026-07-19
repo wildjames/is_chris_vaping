@@ -49,8 +49,11 @@ static void enterLightSleep() {
     // Without a bounded wait the loop would never advance to check the System
     // OFF condition, leaving the device in light sleep (blue LED flashing)
     // indefinitely.
-    TickType_t remaining = pdMS_TO_TICKS(DEEP_SLEEP_TIMEOUT_MS - LIGHT_SLEEP_TIMEOUT_MS);
-    xSemaphoreTake(coilWakeSem, remaining);
+    const unsigned long idle = millis() - lastActivityTime;
+    const unsigned long remainingMs = (idle >= DEEP_SLEEP_TIMEOUT_MS)
+                                         ? 0UL
+                                         : (DEEP_SLEEP_TIMEOUT_MS - idle);
+    xSemaphoreTake(coilWakeSem, pdMS_TO_TICKS(remainingMs));
 
     detachInterrupt(digitalPinToInterrupt(getCoilAPin()));
     detachInterrupt(digitalPinToInterrupt(getCoilBPin()));
