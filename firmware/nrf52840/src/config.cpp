@@ -50,12 +50,14 @@ void configInit() {
         f.read(buf, PIN_CONFIG_SIZE);
         f.close();
 
-        if (buf[0] == PIN_CONFIG_VERSION) {
+        if (buf[0] == PIN_CONFIG_VERSION &&
+            buf[1] < PINS_COUNT && buf[2] < PINS_COUNT) {
             coilAPin = buf[1];
             coilBPin = buf[2];
             Serial.printf("Config: loaded pins from flash (A=%u, B=%u)\n",
                           coilAPin, coilBPin);
         } else {
+            Serial.println("Config: invalid or corrupt pin data, using defaults");
             writeDefaults();
         }
     } else {

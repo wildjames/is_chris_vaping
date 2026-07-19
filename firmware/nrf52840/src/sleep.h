@@ -11,7 +11,7 @@
 // After DEEP_SLEEP_TIMEOUT_MS of coil inactivity the device enters System OFF:
 // the chip fully powers down (<5 µA) and hard-resets on wake.  BLE is lost and
 // re-advertises from scratch after the reset.
-#define DEEP_SLEEP_TIMEOUT_MS    (1UL * 60UL * 1000UL)
+#define DEEP_SLEEP_TIMEOUT_MS    (60UL * 60UL * 1000UL)
 
 void sleepInit();
 void sleepUpdate();
