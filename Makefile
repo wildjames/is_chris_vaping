@@ -6,6 +6,7 @@ export
 
 NRF_DIR := firmware/nrf52840
 HEX_FILE := $(NRF_DIR)/.pio/build/nrf52840/firmware.hex
+HEX_FILE_OTA := $(NRF_DIR)/.pio/build/nrf52840_ota/firmware.hex
 DFU_ZIP := dfu-package.zip
 
 # Pass VERSION=x.y.z to inject the firmware version into the build.
@@ -13,9 +14,7 @@ DFU_ZIP := dfu-package.zip
 VERSION ?=
 
 ifdef VERSION
-PIO_BUILD_FLAGS := PLATFORMIO_BUILD_FLAGS='-DFIRMWARE_VERSION='\"$(VERSION)\"''
-else
-PIO_BUILD_FLAGS :=
+export PLATFORMIO_BUILD_FLAGS := -DFIRMWARE_VERSION=\"$(VERSION)\"
 endif
 
 .PHONY: help build upload dfu-package dummy-vape
@@ -34,13 +33,14 @@ help:
 # ── NRF52840 ─────────────────────────────────────────────────────────────────
 
 build:
-	cd $(NRF_DIR) && $(PIO_BUILD_FLAGS) pio run -e nrf52840
+	cd $(NRF_DIR) && pio run -e nrf52840
 
 upload:
-	cd $(NRF_DIR) && $(PIO_BUILD_FLAGS) pio run -e nrf52840 -t upload
+	cd $(NRF_DIR) && pio run -e nrf52840 -t upload
 
-dfu-package: build
-	adafruit-nrfutil dfu genpkg --dev-type 0x0052 --sd-req 0xFFFE --application $(HEX_FILE) $(DFU_ZIP)
+dfu-package:
+	cd $(NRF_DIR) && pio run -e nrf52840_ota
+	adafruit-nrfutil dfu genpkg --dev-type 0x0052 --sd-req 0xFFFE --application $(HEX_FILE_OTA) $(DFU_ZIP)
 	@echo "DFU package created: $(DFU_ZIP)"
 
 # ── Dev helpers ───────────────────────────────────────────────────────────────

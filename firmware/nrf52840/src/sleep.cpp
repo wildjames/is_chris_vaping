@@ -1,4 +1,5 @@
 #include "sleep.h"
+#include "config.h"
 #include "coils.h"
 
 #include <bluefruit.h>
@@ -15,13 +16,6 @@ extern unsigned long lastActivityTime;
 // Binary semaphore: given by the coil ISR, taken by the blocked loop task.
 // Created once in sleepInit() and reused across every light-sleep cycle.
 static SemaphoreHandle_t coilWakeSem = NULL;
-
-// ---------------------------------------------------------------------------
-// XIAO nRF52840 coil pin → raw nRF GPIO numbers
-// D0 = P0.02 (nRF GPIO 2), D1 = P0.03 (nRF GPIO 3)
-// ---------------------------------------------------------------------------
-#define COIL_A_NRF_GPIO  2
-#define COIL_B_NRF_GPIO  3
 
 static Adafruit_FlashTransport_QSPI flashTransport;
 
@@ -43,20 +37,26 @@ static void enterLightSleep() {
     Serial.println("Light sleep (BLE maintained) — waiting for coil activity");
     Serial.flush();
 
+    digitalWrite(LED_RED, HIGH);  // Ensure LED off during sleep
+
     // Consume any stale token before blocking
     xSemaphoreTake(coilWakeSem, 0);
 
-    attachInterrupt(digitalPinToInterrupt(COIL_A_PIN), coilWakeISR, RISING);
-    attachInterrupt(digitalPinToInterrupt(COIL_B_PIN), coilWakeISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(getCoilAPin()), coilWakeISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(getCoilBPin()), coilWakeISR, RISING);
 
-    // Block this task indefinitely.  The FreeRTOS idle task calls
-    // sd_app_evt_wait() so the CPU sleeps while the SoftDevice keeps the BLE
-    // radio alive and the connection maintained.  The ISR gives the semaphore
-    // and portYIELD_FROM_ISR immediately reschedules the loop task.
-    xSemaphoreTake(coilWakeSem, portMAX_DELAY);
+    // Block until coil activity OR until the deep sleep timeout is reached.
+    // Without a bounded wait the loop would never advance to check the System
+    // OFF condition, leaving the device in light sleep (blue LED flashing)
+    // indefinitely.
+    const unsigned long idle = millis() - lastActivityTime;
+    const unsigned long remainingMs = (idle >= DEEP_SLEEP_TIMEOUT_MS)
+                                         ? 0UL
+                                         : (DEEP_SLEEP_TIMEOUT_MS - idle);
+    xSemaphoreTake(coilWakeSem, pdMS_TO_TICKS(remainingMs));
 
-    detachInterrupt(digitalPinToInterrupt(COIL_A_PIN));
-    detachInterrupt(digitalPinToInterrupt(COIL_B_PIN));
+    detachInterrupt(digitalPinToInterrupt(getCoilAPin()));
+    detachInterrupt(digitalPinToInterrupt(getCoilBPin()));
 
     Serial.println("Woke from light sleep");
     // coilsUpdate() on the very next loop() iteration detects the HIGH pin
@@ -77,13 +77,19 @@ static void enterSystemOff() {
     Serial.println("System OFF — will hard-reset on coil activity");
     Serial.flush();
 
+    // Stop BLE advertising so the library releases the blue LED
+    Bluefruit.Advertising.stop();
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_GREEN, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
+
     powerDownFlash();
 
     // Configure coil pins as high-sense wakeup sources before powering down.
     // GPIO DETECT wakes System OFF with a full chip reset.
-    nrf_gpio_cfg_sense_input(COIL_A_NRF_GPIO, NRF_GPIO_PIN_PULLDOWN,
+    nrf_gpio_cfg_sense_input(getCoilANrfGpio(), NRF_GPIO_PIN_PULLDOWN,
                              NRF_GPIO_PIN_SENSE_HIGH);
-    nrf_gpio_cfg_sense_input(COIL_B_NRF_GPIO, NRF_GPIO_PIN_PULLDOWN,
+    nrf_gpio_cfg_sense_input(getCoilBNrfGpio(), NRF_GPIO_PIN_PULLDOWN,
                              NRF_GPIO_PIN_SENSE_HIGH);
 
     sd_power_system_off();   // never returns

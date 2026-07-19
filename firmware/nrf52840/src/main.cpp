@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "version.h"
+#include "config.h"
 #include "bluetooth.h"
 #include "coils.h"
 #include "sleep.h"
@@ -15,6 +16,7 @@ static const unsigned long NOT_RIPPED_DELAY_MS = 3000;
 void setup() {
     Serial.begin(115200);
 
+    configInit();
     bluetoothInit();
     coilsInit();
     sleepInit();

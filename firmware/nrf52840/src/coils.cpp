@@ -1,4 +1,5 @@
 #include "coils.h"
+#include "config.h"
 #include "bluetooth.h"
 
 // Shared globals owned by main.cpp
@@ -26,14 +27,16 @@ static void handleCoilBStarted();
 static void handleCoilBStopped();
 
 static CoilState coils[] = {
-    { COIL_A_PIN, false, false, 0, handleCoilAStarted, handleCoilAStopped, "Coil A" },
-    { COIL_B_PIN, false, false, 0, handleCoilBStarted, handleCoilBStopped, "Coil B" },
+    { 0, false, false, 0, handleCoilAStarted, handleCoilAStopped, "Coil A" },
+    { 0, false, false, 0, handleCoilBStarted, handleCoilBStopped, "Coil B" },
 };
 
 bool coilAActive = false;
 bool coilBActive = false;
 
 void coilsInit() {
+    coils[0].pin = getCoilAPin();
+    coils[1].pin = getCoilBPin();
     for (auto& c : coils) {
         pinMode(c.pin, INPUT);
     }
@@ -76,12 +79,14 @@ static void handleCoilAStarted() {
     notRippedTimerActive = false;
     coilAActive          = true;
     lastActivityTime     = millis();
+    digitalWrite(LED_RED, LOW);  // Active-low: LED on while coil active
     sendBLEMessage(MSG_COIL_A_STARTED);
 }
 
 static void handleCoilAStopped() {
     coilAActive      = false;
     lastActivityTime = millis();
+    if (!coilBActive) digitalWrite(LED_RED, HIGH);  // LED off when both coils idle
     sendBLEMessage(MSG_COIL_A_STOPPED);
     notRippedTimerStart  = millis();
     notRippedTimerActive = true;
@@ -91,12 +96,14 @@ static void handleCoilBStarted() {
     notRippedTimerActive = false;
     coilBActive          = true;
     lastActivityTime     = millis();
+    digitalWrite(LED_RED, LOW);  // Active-low: LED on while coil active
     sendBLEMessage(MSG_COIL_B_STARTED);
 }
 
 static void handleCoilBStopped() {
     coilBActive      = false;
     lastActivityTime = millis();
+    if (!coilAActive) digitalWrite(LED_RED, HIGH);  // LED off when both coils idle
     sendBLEMessage(MSG_COIL_B_STOPPED);
     notRippedTimerStart  = millis();
     notRippedTimerActive = true;
