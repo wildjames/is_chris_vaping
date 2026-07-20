@@ -70,7 +70,7 @@ function initDevControls() {
   btnDev.addEventListener("click", () => {
     devModeActive = !devModeActive;
     btnDev.textContent = `Dev Mode: ${devModeActive ? "ON" : "OFF"}`;
-    btnToggle.disabled = !devModeActive;
+    btnToggle.style.display = devModeActive ? "" : "none";
     if (devModeActive) {
       applyDevState();
     }
