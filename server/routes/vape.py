@@ -7,7 +7,7 @@ from extensions import (
     Session, cache_get_all_devices, cache_get_device, cache_set_device,
     cache_delete_device, db_persist_vape_update, require_token, _db_executor,
 )
-from models import Device, VapeEvent
+from models import AchievementAward, Device, VapeEvent
 
 vape_bp = Blueprint("vape", __name__)
 
@@ -122,6 +122,11 @@ def device_rename():
         session.execute(
             update(VapeEvent)
             .where(VapeEvent.device_name == old_name)
+            .values(device_name=new_name)
+        )
+        session.execute(
+            update(AchievementAward)
+            .where(AchievementAward.device_name == old_name)
             .values(device_name=new_name)
         )
         session.commit()

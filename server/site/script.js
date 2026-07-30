@@ -330,3 +330,56 @@ function animateBounce() {
 
   bounceAnimationId = requestAnimationFrame(animateBounce);
 }
+
+// --- Achievements ---
+
+function fetchRecentAchievements() {
+  fetch("/achievements/recent")
+    .then(r => r.json())
+    .then(renderRecentAchievements)
+    .catch(() => {});
+}
+
+function renderRecentAchievements(achievements) {
+  const container = document.getElementById("recent-achievements");
+  if (!container || achievements.length === 0) return;
+  container.innerHTML = achievements
+    .map(a => {
+      const who = a.device_name || "Global";
+      return `<span class="achievement-badge" title="${a.description}">🏆 ${a.name} <small>(${who})</small></span>`;
+    })
+    .join("");
+}
+
+function showAchievementToast(data) {
+  const container = document.getElementById("achievement-toasts");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = "achievement-toast";
+  const who = data.device_name || "Global";
+  toast.innerHTML = `<span class="achievement-toast-icon">🏆</span><div><strong>${data.name}</strong><br><small>${data.description} — ${who}</small></div>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("visible"));
+  setTimeout(() => {
+    toast.classList.remove("visible");
+    toast.addEventListener("transitionend", () => toast.remove());
+  }, 5000);
+}
+
+function initAchievementStream() {
+  const source = new EventSource("/achievements/stream");
+  source.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      showAchievementToast(data);
+      fetchRecentAchievements();
+    } catch {}
+  };
+  source.onerror = () => {
+    source.close();
+    setTimeout(initAchievementStream, 5000);
+  };
+}
+
+fetchRecentAchievements();
+initAchievementStream();

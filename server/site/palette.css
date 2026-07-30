@@ -1,0 +1,20 @@
+/*
+ * COLOR PALETTE — Swap colors from coolors.co here.
+ * Assign each of the 5 palette colors to a role below,
+ * then everything else derives automatically.
+ */
+:root {
+    /* Raw palette from coolors.co */
+    --palette-1: rgb(15, 0, 10);
+    --palette-2: rgb(182, 72, 87);
+    --palette-3: #f2d0a4ff;
+    --palette-4: #ffecccff;
+    --palette-5: #c8d6afff;
+
+    /* Role assignments — remap these when swapping palettes */
+    --color-bg: var(--palette-1);        /* page background base */
+    --color-accent: var(--palette-2);    /* headings, primary buttons, highlights */
+    --color-secondary: var(--palette-3); /* hover states, secondary interactive */
+    --color-muted: var(--palette-4);     /* subtle text, labels, borders */
+    --color-text: var(--palette-5);      /* primary text */
+}

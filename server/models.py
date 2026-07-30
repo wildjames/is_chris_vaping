@@ -31,6 +31,17 @@ class VapeEvent(Base):
     )
 
 
+class AchievementAward(Base):
+    __tablename__ = "achievement_awards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    achievement_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    device_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    awarded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class Firmware(Base):
     __tablename__ = "firmware"
 

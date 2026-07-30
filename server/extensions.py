@@ -64,6 +64,7 @@ redis_client = redis.Redis(
 DEVICE_LIST_KEY = f"{REDIS_KEY}:devices"
 DEVICE_KEY_PREFIX = f"{REDIS_KEY}:device:"
 STATS_NOTIFY_CHANNEL = f"{REDIS_KEY}:stats_notify"
+ACHIEVEMENT_CHANNEL = f"{REDIS_KEY}:achievements"
 
 # --- MariaDB (persistent) ---
 
@@ -187,6 +188,12 @@ def db_persist_vape_update(vape_name, coil, event, state, timestamp):
             session.close()
     except Exception:
         logger.exception("Failed to persist vape update to DB")
+
+    try:
+        from achievements import run_checks
+        run_checks(vape_name, coil, event, timestamp)
+    except Exception:
+        logger.exception("Failed to check achievements")
 
 
 # --- Watchdog ---
