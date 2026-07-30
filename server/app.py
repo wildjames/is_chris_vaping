@@ -10,7 +10,7 @@ from routes.admin import admin_bp
 from routes.firmware import firmware_bp
 from routes.vape import vape_bp
 
-app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="")
+app = Flask(__name__, static_folder=None)
 _secret_key = os.environ.get("FLASK_SECRET_KEY")
 if not _secret_key and not DEV_MODE:
     raise RuntimeError("FLASK_SECRET_KEY must be set in non-dev mode")
