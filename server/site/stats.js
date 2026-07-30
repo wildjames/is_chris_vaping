@@ -113,7 +113,7 @@
                 }
                 container.innerHTML = unlocked.map(function (a) {
                     var date = new Date(a.awarded[0].awarded_at).toLocaleDateString();
-                    return '<span class="achievement-badge" title="' + escapeHtml(a.description) + '">' +
+                    return '<span class="achievement-badge" data-tooltip="' + escapeHtml(a.description) + '">' +
                         '🏆 ' + escapeHtml(a.name) + ' <small>(' + date + ')</small></span>';
                 }).join('');
             })
