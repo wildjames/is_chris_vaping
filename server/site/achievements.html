@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Achievements - Is Chris Vaping?</title>
+    <link rel="stylesheet" href="palette.css">
+    <link rel="stylesheet" href="common.css">
+    <link rel="stylesheet" href="achievements.css">
+</head>
+<body>
+    <header>
+        <h1>Achievements</h1>
+        <nav>
+            <a href="/">Home</a>
+            <a href="/stats">Stats</a>
+        </nav>
+    </header>
+    <div class="container">
+        <div class="filter-bar">
+            <label for="device-filter">Filter by device:</label>
+            <select id="device-filter">
+                <option value="">All Devices</option>
+            </select>
+        </div>
+        <div class="achievements-summary">
+            <span id="unlocked-count">0</span> / <span id="total-count">0</span> unlocked
+        </div>
+        <div id="achievements-grid" class="achievements-grid"></div>
+    </div>
+    <script src="achievements.js"></script>
+</body>
+</html>

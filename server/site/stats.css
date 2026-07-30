@@ -13,3 +13,25 @@
     color: var(--accent);
     margin-bottom: 1rem;
 }
+
+.device-achievements {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.device-achievements .achievement-badge {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.85rem;
+    color: var(--text);
+    cursor: default;
+}
+
+.device-achievements .no-achievements {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-style: italic;
+}

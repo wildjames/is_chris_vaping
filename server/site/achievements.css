@@ -1,0 +1,84 @@
+.filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.filter-bar label {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.filter-bar select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+}
+
+.achievements-summary {
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.achievement-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem;
+    transition: border-color 0.2s;
+}
+
+.achievement-card.unlocked {
+    border-color: var(--accent);
+}
+
+.achievement-card.locked {
+    opacity: 0.5;
+}
+
+.achievement-card .ach-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+}
+
+.achievement-card .ach-icon {
+    font-size: 1.5rem;
+}
+
+.achievement-card .ach-name {
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 1rem;
+}
+
+.achievement-card .ach-description {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.6rem;
+}
+
+.achievement-card .ach-awards {
+    font-size: 0.8rem;
+    color: var(--text);
+}
+
+.achievement-card .ach-awards .award-entry {
+    margin-top: 0.25rem;
+}
+
+.achievement-card .ach-awards .award-device {
+    color: var(--secondary);
+}
