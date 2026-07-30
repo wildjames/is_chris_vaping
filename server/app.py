@@ -55,6 +55,11 @@ def serve_stats():
     return send_from_directory(SITE_DIR, "stats.html")
 
 
+@app.route("/achievements", methods=["GET"])
+def serve_achievements():
+    return send_from_directory(SITE_DIR, "achievements.html")
+
+
 @app.route("/", methods=["GET"])
 def serve_index():
     return send_from_directory(SITE_DIR, "index.html")

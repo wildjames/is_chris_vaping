@@ -1,13 +1,48 @@
 import json
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 from sqlalchemy import select
 
 from achievements import get_achievement_meta
+from achievements.base import _registry
 from extensions import ACHIEVEMENT_CHANNEL, Session, redis_client
 from models import AchievementAward
 
 achievements_bp = Blueprint("achievements", __name__)
+
+
+@achievements_bp.route("/achievements/all", methods=["GET"])
+def all_achievements():
+    """Return all possible achievements and their award status, optionally filtered by device."""
+    device_filter = request.args.get("device")
+    db_session = Session()
+    try:
+        query = select(AchievementAward)
+        if device_filter:
+            query = query.where(AchievementAward.device_name == device_filter)
+        awards = db_session.execute(query).scalars().all()
+
+        awarded_map = {}
+        for award in awards:
+            key = award.achievement_id
+            if key not in awarded_map:
+                awarded_map[key] = []
+            awarded_map[key].append({
+                "device_name": award.device_name,
+                "awarded_at": award.awarded_at.isoformat(),
+            })
+
+        result = []
+        for ach in _registry:
+            result.append({
+                "id": ach.id,
+                "name": ach.name,
+                "description": ach.description,
+                "awarded": awarded_map.get(ach.id, []),
+            })
+        return jsonify(result), 200
+    finally:
+        db_session.close()
 
 
 @achievements_bp.route("/achievements/recent", methods=["GET"])

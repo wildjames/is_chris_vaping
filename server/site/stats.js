@@ -25,7 +25,7 @@
             var cached = deviceSections[device.name];
 
             if (cached) {
-                var statValues = cached.section.querySelectorAll('.stat-value');
+                var statValues = cached.section.querySelectorAll('.stats-row .stat-value');
                 statValues[0].textContent = device.chuffs_last_hour;
                 statValues[1].textContent = device.chuffs_last_6_hours;
                 statValues[2].textContent = device.chuffs_since_midnight;
@@ -73,6 +73,10 @@
                     '<div class="chart-wrapper">' +
                         '<canvas class="duration-chart"></canvas>' +
                     '</div>' +
+                '</div>' +
+                '<div class="card device-achievements-card">' +
+                    '<h3>Achievements</h3>' +
+                    '<div class="device-achievements"></div>' +
                 '</div>';
             container.appendChild(section);
 
@@ -89,11 +93,31 @@
 
             renderChuffChart(chuffCanvas, device.events_24h, 5, device.name);
             renderDurationChart(durationCanvas, device.events_24h, device.name);
+            loadDeviceAchievements(section, device.name);
 
             windowSelect.addEventListener('change', function () {
                 renderChuffChart(chuffCanvas, device.events_24h, parseInt(windowSelect.value), device.name);
             });
         });
+    }
+
+    function loadDeviceAchievements(section, deviceName) {
+        fetch('/achievements/all?device=' + encodeURIComponent(deviceName))
+            .then(function (r) { return r.json(); })
+            .then(function (achievements) {
+                var container = section.querySelector('.device-achievements');
+                var unlocked = achievements.filter(function (a) { return a.awarded.length > 0; });
+                if (unlocked.length === 0) {
+                    container.innerHTML = '<p class="no-achievements">No achievements unlocked yet.</p>';
+                    return;
+                }
+                container.innerHTML = unlocked.map(function (a) {
+                    var date = new Date(a.awarded[0].awarded_at).toLocaleDateString();
+                    return '<span class="achievement-badge" title="' + escapeHtml(a.description) + '">' +
+                        '🏆 ' + escapeHtml(a.name) + ' <small>(' + date + ')</small></span>';
+                }).join('');
+            })
+            .catch(function () {});
     }
 
     function renderChuffChart(canvas, events, windowMinutes, deviceName) {
