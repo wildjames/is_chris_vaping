@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Integer, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
@@ -15,8 +16,8 @@ class Device(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     coil_a: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     coil_b: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    last_event: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    last_updated: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_event: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    last_updated: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class VapeEvent(Base):
@@ -36,7 +37,7 @@ class AchievementAward(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     achievement_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    device_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    device_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     awarded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
@@ -49,7 +50,7 @@ class Firmware(Base):
     version: Mapped[str] = mapped_column(String(100), nullable=False)
     variant: Mapped[str] = mapped_column(String(50), nullable=False, default="nrf52840")
     size: Mapped[int] = mapped_column(Integer, nullable=False)
-    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
