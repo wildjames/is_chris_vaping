@@ -4,6 +4,19 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// Version injected at build time via APP_VERSION env var (same logic as firmware).
+// Without it the app reports "0.0.0" / versionCode 1.
+val appVersion: String = System.getenv("APP_VERSION") ?: "0.0.0"
+val appVersionCode: Int = run {
+    val parts = appVersion.split(".")
+    if (parts.size == 3) {
+        val (major, minor, patch) = parts.map { it.toIntOrNull() ?: 0 }
+        major * 10000 + minor * 100 + patch
+    } else {
+        1
+    }
+}
+
 android {
     namespace = "com.ischrisvaping.app"
     compileSdk = 37
@@ -12,8 +25,8 @@ android {
         applicationId = "com.ischrisvaping.app"
         minSdk = 33
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersion
     }
 
     signingConfigs {
