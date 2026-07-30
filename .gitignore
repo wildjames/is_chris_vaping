@@ -6,3 +6,6 @@
 .vscode/ipch
 
 __pycache__/
+
+*.pem
+*.keystore
