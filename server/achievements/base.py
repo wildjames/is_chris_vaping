@@ -1,6 +1,6 @@
 import logging
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -13,9 +13,14 @@ class AchievementContext:
     device_name: str
     coil: str
     event: str  # "started" or "stopped"
-    timestamp: datetime
-    db_session: object  # SQLAlchemy Session
-    all_devices: dict  # {name: {coil_a, coil_b, last_event, last_updated}}
+    timestamp: datetime = field(default=None)
+    db_session: object = None  # SQLAlchemy Session
+    all_devices: dict = None  # {name: {coil_a, coil_b, last_event, last_updated}}
+
+    def __post_init__(self):
+        # Normalize to naive UTC so comparisons with DB timestamps work
+        if self.timestamp is not None and self.timestamp.tzinfo is not None:
+            self.timestamp = self.timestamp.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 class Achievement:
