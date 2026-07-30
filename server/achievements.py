@@ -11,6 +11,7 @@ from extensions import (
     Session,
     cache_get_all_devices,
     redis_client,
+    send_achievement_push,
 )
 from models import AchievementAward, VapeEvent
 
@@ -113,6 +114,8 @@ def run_checks(device_name, coil, event, timestamp):
                         "awarded_at": timestamp.isoformat(),
                     }),
                 )
+                if scope_device:
+                    send_achievement_push(scope_device, ach.name, ach.description)
                 logger.info(
                     "Achievement unlocked: %s for %s",
                     ach.name,

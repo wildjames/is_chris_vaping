@@ -15,9 +15,11 @@ services:
       - DEV_MODE=true
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-credentials.json
     volumes:
       - firmware_data:/firmware
       - ./server/site:/app/site
+      - ./server/firebase-credentials.json:/app/firebase-credentials.json:ro
     depends_on:
       redis:
         condition: service_started

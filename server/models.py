@@ -55,6 +55,17 @@ class Firmware(Base):
     )
 
 
+class PushToken(Base):
+    __tablename__ = "push_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    device_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 def init_db(db_url: str):
     engine = create_engine(db_url, pool_pre_ping=True, pool_recycle=3600)
     Base.metadata.create_all(engine)

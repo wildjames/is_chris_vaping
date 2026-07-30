@@ -9,9 +9,12 @@ import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import android.widget.Button
+import android.os.Handler
+import android.os.Looper
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -265,6 +268,41 @@ class MainActivity : AppCompatActivity() {
             setText(prefs.getString("auth_token", ""))
         }
         layout.addView(tokenInput)
+
+        val testButton = Button(this).apply {
+            text = "Test Server"
+            setOnClickListener {
+                val url = urlInput.text.toString().trim()
+                val token = tokenInput.text.toString().trim()
+                if (url.isBlank()) {
+                    Toast.makeText(this@MainActivity, "Enter a server URL first", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                isEnabled = false
+                text = "Testing…"
+                Executors.newSingleThreadExecutor().execute {
+                    val result = try {
+                        val conn = URL("$url/health").openConnection() as HttpURLConnection
+                        conn.requestMethod = "GET"
+                        conn.connectTimeout = 5000
+                        conn.readTimeout = 5000
+                        if (token.isNotBlank()) {
+                            conn.setRequestProperty("Authorization", "Bearer $token")
+                        }
+                        val code = conn.responseCode
+                        conn.disconnect()
+                        if (code == 200) "Server OK" else "Server returned $code"
+                    } catch (e: Exception) {
+                        "Failed: ${e.message}"
+                    }
+                    Handler(Looper.getMainLooper()).post {
+                        text = result
+                        isEnabled = true
+                    }
+                }
+            }
+        }
+        layout.addView(testButton)
 
         AlertDialog.Builder(this)
             .setTitle("Server Settings")

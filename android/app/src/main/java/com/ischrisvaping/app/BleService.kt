@@ -62,6 +62,9 @@ class BleService : Service() {
         statusNotifier.createNotificationChannel()
         deviceRepository.load()
 
+        // Register FCM token for push notifications
+        FcmService.registerTokenForDevices(this)
+
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         connectionManager.initialize(bluetoothManager.adapter?.bluetoothLeScanner)
     }
