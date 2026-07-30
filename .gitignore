@@ -9,3 +9,4 @@ __pycache__/
 
 *.pem
 *.keystore
+firebase-credentials.json

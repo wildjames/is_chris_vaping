@@ -2,6 +2,22 @@
 
 BLE companion app for the IsChrisVaping vape sensor.
 
+## Features
+
+- Connects to vape devices over BLE and reports events to the server
+- Push notifications when a connected vape earns an achievement (via Firebase Cloud Messaging)
+- OTA firmware updates over BLE (Nordic DFU)
+
+## Push Notifications
+
+The app registers its FCM token with the server for each connected device. When that device earns an achievement, the server sends a push notification.
+
+**Requirements:**
+- The server must have a Firebase Admin SDK service account JSON at `server/firebase-credentials.json`
+- The `GOOGLE_APPLICATION_CREDENTIALS` env var must point to it (already configured in `docker-compose.yml`)
+
+The token is re-registered automatically on each BLE service start and whenever FCM rotates the token.
+
 ## CI/CD — Firebase App Distribution
 
 Pushes to `main` that modify files under `android/` trigger the GitHub Actions workflow (`.github/workflows/android.yml`), which builds a signed release APK and uploads it to Firebase App Distribution for beta testers.

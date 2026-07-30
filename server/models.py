@@ -31,6 +31,17 @@ class VapeEvent(Base):
     )
 
 
+class AchievementAward(Base):
+    __tablename__ = "achievement_awards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    achievement_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    device_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    awarded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class Firmware(Base):
     __tablename__ = "firmware"
 
@@ -40,6 +51,17 @@ class Firmware(Base):
     size: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class PushToken(Base):
+    __tablename__ = "push_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    device_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 

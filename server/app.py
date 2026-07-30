@@ -6,7 +6,9 @@ import os
 from flask import Flask, jsonify, send_from_directory
 
 from extensions import DEV_MODE, SITE_DIR
+import achievements  # noqa: F401 — triggers @register decorators
 from routes.admin import admin_bp
+from routes.achievements import achievements_bp
 from routes.firmware import firmware_bp
 from routes.stats import stats_bp
 from routes.vape import vape_bp
@@ -30,6 +32,7 @@ app.register_blueprint(vape_bp)
 app.register_blueprint(firmware_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(stats_bp)
+app.register_blueprint(achievements_bp)
 
 
 @app.route("/health", methods=["GET"])

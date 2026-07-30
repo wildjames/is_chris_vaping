@@ -1,9 +1,21 @@
+:root {
+    --bg: var(--color-bg);
+    --bg-dark: color-mix(in srgb, var(--color-bg), black 20%);
+    --bg-darker: color-mix(in srgb, var(--color-bg), black 35%);
+    --accent: var(--color-accent);
+    --secondary: var(--color-secondary);
+    --muted: var(--color-muted);
+    --text: var(--color-text);
+    --border: color-mix(in srgb, var(--color-muted), transparent 80%);
+    --border-strong: color-mix(in srgb, var(--color-muted), transparent 65%);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #000;
-    color: #fff;
+    background: var(--bg-darker);
+    color: var(--text);
     min-height: 100vh;
 }
 
@@ -20,15 +32,15 @@ body {
 }
 
 header {
-    background: #111;
+    background: var(--bg-dark);
     padding: 1rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-strong);
 }
 
-header h1 { font-size: 1.3rem; }
+header h1 { font-size: 1.3rem; color: var(--accent); }
 
 .container {
     max-width: 1200px;
@@ -37,8 +49,8 @@ header h1 { font-size: 1.3rem; }
 }
 
 .card {
-    background: #111;
-    border: 1px solid #333;
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -48,7 +60,7 @@ header h1 { font-size: 1.3rem; }
 .card h3 {
     margin-bottom: 1rem;
     font-size: 1rem;
-    color: #999;
+    color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -63,8 +75,8 @@ header h1 { font-size: 1.3rem; }
 }
 
 .stat-card {
-    background: #111;
-    border: 1px solid #333;
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 1.2rem;
     text-align: center;
@@ -73,12 +85,12 @@ header h1 { font-size: 1.3rem; }
 .stat-card .stat-value {
     font-size: 2rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--accent);
 }
 
 .stat-card .stat-label {
     font-size: 0.85rem;
-    color: #999;
+    color: var(--muted);
     margin-top: 0.3rem;
 }
 
@@ -92,10 +104,10 @@ header h1 { font-size: 1.3rem; }
 .chart-controls select,
 .chart-controls button {
     padding: 0.5rem 1rem;
-    border: 1px solid #333;
+    border: 1px solid var(--border-strong);
     border-radius: 6px;
-    background: #111;
-    color: #fff;
+    background: var(--bg-dark);
+    color: var(--secondary);
     font-size: 0.85rem;
     cursor: pointer;
 }

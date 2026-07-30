@@ -7,7 +7,7 @@ from extensions import (
     Session, cache_get_all_devices, cache_get_device, cache_set_device,
     cache_delete_device, db_persist_vape_update, require_token, _db_executor,
 )
-from models import Device, VapeEvent
+from models import AchievementAward, Device, PushToken, VapeEvent
 
 vape_bp = Blueprint("vape", __name__)
 
@@ -124,6 +124,16 @@ def device_rename():
             .where(VapeEvent.device_name == old_name)
             .values(device_name=new_name)
         )
+        session.execute(
+            update(AchievementAward)
+            .where(AchievementAward.device_name == old_name)
+            .values(device_name=new_name)
+        )
+        session.execute(
+            update(PushToken)
+            .where(PushToken.device_name == old_name)
+            .values(device_name=new_name)
+        )
         session.commit()
     finally:
         session.close()
@@ -150,3 +160,65 @@ def vape_status():
     except Exception as e:
         current_app.logger.exception("Error retrieving vape status: %s", e)
         return jsonify({"is_vaping": False, "devices": {}}), 200
+
+
+@vape_bp.route("/push-token", methods=["POST"])
+@require_token
+def register_push_token():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    token = data.get("token")
+    device_name = data.get("device_name")
+
+    if not isinstance(token, str) or not token.strip():
+        return jsonify({"error": "token is required"}), 400
+    if not isinstance(device_name, str) or not device_name.strip():
+        return jsonify({"error": "device_name is required"}), 400
+
+    token = token.strip()
+    device_name = device_name.strip()
+    if len(token) > 255:
+        return jsonify({"error": "token too long"}), 400
+
+    session = Session()
+    try:
+        existing = session.execute(
+            select(PushToken).where(PushToken.token == token)
+        ).scalar_one_or_none()
+
+        if existing:
+            existing.device_name = device_name
+        else:
+            session.add(PushToken(token=token, device_name=device_name))
+        session.commit()
+    finally:
+        session.close()
+
+    return jsonify({"status": "ok"}), 200
+
+
+@vape_bp.route("/push-token", methods=["DELETE"])
+@require_token
+def unregister_push_token():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    token = data.get("token")
+    if not isinstance(token, str) or not token.strip():
+        return jsonify({"error": "token is required"}), 400
+
+    session = Session()
+    try:
+        existing = session.execute(
+            select(PushToken).where(PushToken.token == token.strip())
+        ).scalar_one_or_none()
+        if existing:
+            session.delete(existing)
+            session.commit()
+    finally:
+        session.close()
+
+    return jsonify({"status": "ok"}), 200

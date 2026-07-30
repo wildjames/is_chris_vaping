@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import URL
 from werkzeug.security import generate_password_hash
 
-from models import Device, VapeEvent, init_db
+from models import Device, PushToken, VapeEvent, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ redis_client = redis.Redis(
 DEVICE_LIST_KEY = f"{REDIS_KEY}:devices"
 DEVICE_KEY_PREFIX = f"{REDIS_KEY}:device:"
 STATS_NOTIFY_CHANNEL = f"{REDIS_KEY}:stats_notify"
+ACHIEVEMENT_CHANNEL = f"{REDIS_KEY}:achievements"
 
 # --- MariaDB (persistent) ---
 
@@ -76,6 +77,25 @@ DB_URL = URL.create(
     database=DB_NAME,
 )
 engine, Session = init_db(DB_URL)
+
+# --- Firebase Cloud Messaging ---
+
+FCM_CREDENTIALS_FILE = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+
+_fcm_initialized = False
+try:
+    import firebase_admin
+    from firebase_admin import credentials, messaging as fcm_messaging
+
+    if FCM_CREDENTIALS_FILE and Path(FCM_CREDENTIALS_FILE).exists():
+        cred = credentials.Certificate(FCM_CREDENTIALS_FILE)
+        firebase_admin.initialize_app(cred)
+        _fcm_initialized = True
+        logger.info("Firebase Admin SDK initialized")
+    else:
+        logger.warning("GOOGLE_APPLICATION_CREDENTIALS not set or file not found, push notifications disabled")
+except Exception:
+    logger.exception("Failed to initialize Firebase Admin SDK")
 
 # --- Background worker pool ---
 
@@ -187,6 +207,72 @@ def db_persist_vape_update(vape_name, coil, event, state, timestamp):
             session.close()
     except Exception:
         logger.exception("Failed to persist vape update to DB")
+
+    try:
+        from achievements import run_checks
+        run_checks(vape_name, coil, event, timestamp)
+    except Exception:
+        logger.exception("Failed to check achievements")
+
+
+# --- Push notifications ---
+
+def send_achievement_push(device_name, achievement_name, achievement_description):
+    """Send a push notification to all tokens registered for this device."""
+    if not _fcm_initialized:
+        return
+
+    session = Session()
+    try:
+        tokens = [
+            row.token for row in
+            session.execute(
+                select(PushToken).where(PushToken.device_name == device_name)
+            ).scalars()
+        ]
+        if not tokens:
+            return
+
+        message = fcm_messaging.MulticastMessage(
+            tokens=tokens,
+            notification=fcm_messaging.Notification(
+                title=f"Achievement Unlocked: {achievement_name}",
+                body=achievement_description,
+            ),
+            data={
+                "type": "achievement",
+                "achievement_name": achievement_name,
+                "device_name": device_name or "",
+            },
+            android=fcm_messaging.AndroidConfig(
+                notification=fcm_messaging.AndroidNotification(
+                    channel_id="achievements_channel",
+                ),
+            ),
+        )
+        response = fcm_messaging.send_each_for_multicast(message)
+
+        # Clean up invalid tokens
+        for i, send_response in enumerate(response.responses):
+            if send_response.exception and _is_token_invalid(send_response.exception):
+                stale_token = tokens[i]
+                stale = session.execute(
+                    select(PushToken).where(PushToken.token == stale_token)
+                ).scalar_one_or_none()
+                if stale:
+                    session.delete(stale)
+        session.commit()
+    except Exception:
+        logger.exception("Failed to send achievement push notification")
+        session.rollback()
+    finally:
+        session.close()
+
+
+def _is_token_invalid(exception):
+    """Check if an FCM error indicates the token is no longer valid."""
+    from firebase_admin.exceptions import NotFoundError, InvalidArgumentError
+    return isinstance(exception, (NotFoundError, InvalidArgumentError))
 
 
 # --- Watchdog ---
