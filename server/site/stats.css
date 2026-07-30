@@ -1,0 +1,15 @@
+.device-section {
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #333;
+}
+
+.device-section:last-child {
+    border-bottom: none;
+}
+
+.device-section h2 {
+    font-size: 1.3rem;
+    color: #fff;
+    margin-bottom: 1rem;
+}

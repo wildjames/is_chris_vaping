@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request, session
@@ -140,65 +139,6 @@ def admin_device_events(device_id):
                 "event": e.event,
                 "timestamp": e.timestamp.isoformat(),
             } for e in events],
-        }), 200
-    finally:
-        db_session.close()
-
-
-@admin_bp.route("/admin/activity", methods=["GET"])
-@require_admin
-def admin_activity():
-    """Get aggregated vape activity data for charts.
-
-    Query params:
-      - days: number of days to look back (default 7)
-      - device: optional device name filter
-    """
-    days = request.args.get("days", 7, type=int)
-    days = min(max(days, 1), 365)
-    device_filter = request.args.get("device")
-
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-
-    db_session = Session()
-    try:
-        query = select(VapeEvent).where(VapeEvent.timestamp >= since)
-        if device_filter:
-            query = query.where(VapeEvent.device_name == device_filter)
-        query = query.order_by(VapeEvent.timestamp.asc())
-
-        events = db_session.execute(query).scalars().all()
-
-        # Aggregate by hour
-        hourly = {}
-        for e in events:
-            hour_key = e.timestamp.strftime("%Y-%m-%d %H:00")
-            if hour_key not in hourly:
-                hourly[hour_key] = {"started": 0, "stopped": 0}
-            hourly[hour_key][e.event] = hourly[hour_key].get(e.event, 0) + 1
-
-        # Aggregate by day
-        daily = {}
-        for e in events:
-            day_key = e.timestamp.strftime("%Y-%m-%d")
-            if day_key not in daily:
-                daily[day_key] = {"started": 0, "stopped": 0}
-            daily[day_key][e.event] = daily[day_key].get(e.event, 0) + 1
-
-        # Per-device totals
-        per_device = {}
-        for e in events:
-            if e.device_name not in per_device:
-                per_device[e.device_name] = {"started": 0, "stopped": 0}
-            per_device[e.device_name][e.event] = per_device[e.device_name].get(e.event, 0) + 1
-
-        return jsonify({
-            "days": days,
-            "since": since.isoformat(),
-            "hourly": hourly,
-            "daily": daily,
-            "per_device": per_device,
-            "total_events": len(events),
         }), 200
     finally:
         db_session.close()

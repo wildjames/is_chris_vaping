@@ -1,24 +1,3 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #1a1a2e;
-    color: #eee;
-    min-height: 100vh;
-}
-
-.visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-}
-
 /* Login */
 .login-container {
     display: flex;
@@ -28,10 +7,10 @@ body {
 }
 
 .login-box {
-    background: #16213e;
+    background: #111;
+    border: 1px solid #333;
     padding: 2rem;
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     width: 100%;
     max-width: 360px;
 }
@@ -47,8 +26,8 @@ body {
     padding: 0.75rem;
     border: 1px solid #333;
     border-radius: 6px;
-    background: #0f3460;
-    color: #eee;
+    background: #222;
+    color: #fff;
     font-size: 1rem;
     margin-bottom: 1rem;
 }
@@ -58,17 +37,17 @@ body {
     padding: 0.75rem;
     border: none;
     border-radius: 6px;
-    background: #e94560;
-    color: white;
+    background: #fff;
+    color: #000;
     font-size: 1rem;
     cursor: pointer;
     font-weight: 600;
 }
 
-.login-box button:hover { background: #c73e54; }
+.login-box button:hover { background: #ccc; }
 
 .login-error {
-    color: #e94560;
+    color: #f44;
     text-align: center;
     margin-top: 0.5rem;
     min-height: 1.2em;
@@ -79,77 +58,17 @@ body {
 .dashboard.active { display: block; }
 .login-container.hidden { display: none; }
 
-header {
-    background: #16213e;
-    padding: 1rem 2rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #333;
-}
-
-header h1 { font-size: 1.3rem; }
-
 header button {
     padding: 0.5rem 1rem;
-    border: 1px solid #e94560;
+    border: 1px solid #fff;
     border-radius: 6px;
     background: transparent;
-    color: #e94560;
+    color: #fff;
     cursor: pointer;
     font-size: 0.85rem;
 }
 
-header button:hover { background: #e94560; color: white; }
-
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-}
-
-.card {
-    background: #16213e;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-}
-
-.card h2 {
-    margin-bottom: 1rem;
-    font-size: 1.1rem;
-    color: #aaa;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-/* Stats */
-.stats-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.stat-card {
-    background: #0f3460;
-    border-radius: 8px;
-    padding: 1.2rem;
-    text-align: center;
-}
-
-.stat-card .stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #e94560;
-}
-
-.stat-card .stat-label {
-    font-size: 0.85rem;
-    color: #aaa;
-    margin-top: 0.3rem;
-}
+header button:hover { background: #fff; color: #000; }
 
 /* Device table */
 .device-table {
@@ -165,13 +84,13 @@ header button:hover { background: #e94560; color: white; }
 }
 
 .device-table th {
-    color: #aaa;
+    color: #999;
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
 
-.device-table tr:hover { background: rgba(233, 69, 96, 0.05); }
+.device-table tr:hover { background: rgba(255, 255, 255, 0.03); }
 
 .status-dot {
     display: inline-block;
@@ -186,55 +105,28 @@ header button:hover { background: #e94560; color: white; }
 
 .btn-delete {
     padding: 0.4rem 0.8rem;
-    border: 1px solid #e94560;
+    border: 1px solid #f44;
     border-radius: 4px;
     background: transparent;
-    color: #e94560;
+    color: #f44;
     cursor: pointer;
     font-size: 0.8rem;
 }
 
-.btn-delete:hover { background: #e94560; color: white; }
+.btn-delete:hover { background: #f44; color: #fff; }
 
 .btn-view {
     padding: 0.4rem 0.8rem;
-    border: 1px solid #4caf50;
+    border: 1px solid #fff;
     border-radius: 4px;
     background: transparent;
-    color: #4caf50;
+    color: #fff;
     cursor: pointer;
     font-size: 0.8rem;
     margin-right: 0.5rem;
 }
 
-.btn-view:hover { background: #4caf50; color: white; }
-
-/* Charts */
-.chart-controls {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-}
-
-.chart-controls select,
-.chart-controls button {
-    padding: 0.5rem 1rem;
-    border: 1px solid #333;
-    border-radius: 6px;
-    background: #0f3460;
-    color: #eee;
-    font-size: 0.85rem;
-    cursor: pointer;
-}
-
-.chart-controls button { border-color: #4caf50; color: #4caf50; }
-.chart-controls button:hover { background: #4caf50; color: white; }
-
-.chart-wrapper {
-    position: relative;
-    height: 300px;
-}
+.btn-view:hover { background: #fff; color: #000; }
 
 /* Events modal */
 .modal-overlay {
@@ -250,7 +142,8 @@ header button:hover { background: #e94560; color: white; }
 .modal-overlay.active { display: flex; }
 
 .modal {
-    background: #16213e;
+    background: #111;
+    border: 1px solid #333;
     border-radius: 12px;
     padding: 2rem;
     max-width: 700px;
@@ -265,7 +158,7 @@ header button:hover { background: #e94560; color: white; }
     float: right;
     background: none;
     border: none;
-    color: #eee;
+    color: #fff;
     font-size: 1.5rem;
     cursor: pointer;
 }
@@ -283,13 +176,7 @@ header button:hover { background: #e94560; color: white; }
 }
 
 .event-started { color: #4caf50; }
-.event-stopped { color: #e94560; }
+.event-stopped { color: #f44; }
 .event-time { color: #888; }
 
-.chart-wrapper--short { height: 200px; }
 .table-scroll { overflow-x: auto; }
-
-@media (max-width: 768px) {
-    .container { padding: 1rem; }
-    .chart-wrapper { height: 250px; }
-}

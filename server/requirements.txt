@@ -1,5 +1,6 @@
 flask==3.1.*
 gunicorn==23.*
+gevent==25.*
 qrcode==8.*
 Pillow==12.1.*
 redis==8.*

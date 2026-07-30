@@ -113,8 +113,7 @@ setInterval(() => {
         showNobodyVaping();
       }
 
-      const debugElement = document.getElementById("debug_par");
-      if (debugElement) debugElement.textContent = JSON.stringify(data);
+
     })
     .catch(error => {
         setStatusHTML("Failed to fetch vape status.");

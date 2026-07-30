@@ -29,9 +29,14 @@
   padding: 10px;
 }
 
-.debug {
-  font-size: 0.8em;
+.stats-link {
+  font-size: 0.9em;
   color: #666;
+  text-decoration: none;
+}
+
+.stats-link:hover {
+  text-decoration: underline;
 }
 
 .dev-controls {

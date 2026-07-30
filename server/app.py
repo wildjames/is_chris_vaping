@@ -8,6 +8,7 @@ from flask import Flask, jsonify, send_from_directory
 from extensions import DEV_MODE, SITE_DIR
 from routes.admin import admin_bp
 from routes.firmware import firmware_bp
+from routes.stats import stats_bp
 from routes.vape import vape_bp
 
 app = Flask(__name__, static_folder=None)
@@ -28,6 +29,7 @@ _gif_manifest = [f.name for f in GIFS_DIR.iterdir() if f.suffix.lower() in _gif_
 app.register_blueprint(vape_bp)
 app.register_blueprint(firmware_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(stats_bp)
 
 
 @app.route("/health", methods=["GET"])
@@ -43,6 +45,11 @@ def dev_config():
 @app.route("/admin", methods=["GET"])
 def serve_admin():
     return send_from_directory(SITE_DIR, "admin.html")
+
+
+@app.route("/stats", methods=["GET"])
+def serve_stats():
+    return send_from_directory(SITE_DIR, "stats.html")
 
 
 @app.route("/", methods=["GET"])
