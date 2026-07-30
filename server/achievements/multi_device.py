@@ -54,7 +54,7 @@ class Duet(Achievement):
 class MexicanWave(Achievement):
     id = "mexican_wave"
     name = "Mexican Wave"
-    description = "3+ devices puff in sequence within 10 seconds"
+    description = "3+ devices puff within 10 seconds"
 
     def device_scope(self, ctx):
         return None

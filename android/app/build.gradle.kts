@@ -11,7 +11,8 @@ val appVersionCode: Int = run {
     val parts = appVersion.split(".")
     if (parts.size == 3) {
         val (major, minor, patch) = parts.map { it.toIntOrNull() ?: 0 }
-        major * 10000 + minor * 100 + patch
+        val computed = major * 10000 + minor * 100 + patch
+        if (computed > 0) computed else 1
     } else {
         1
     }

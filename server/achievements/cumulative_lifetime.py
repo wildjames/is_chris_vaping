@@ -68,14 +68,11 @@ class Dedicated(Achievement):
         # Check firmware versions via OTA tracking
         # Firmware updates are tracked in the firmware table
         # We track by looking at distinct firmware events or device metadata
-        try:
-            from models import Firmware
-            versions = ctx.db_session.execute(
-                select(func.count(func.distinct(Firmware.version)))
-            ).scalar()
-            return versions >= 3
-        except Exception:
-            return False
+        from models import Firmware
+        versions = ctx.db_session.execute(
+            select(func.count(func.distinct(Firmware.version)))
+        ).scalar()
+        return versions >= 3
 
 
 @register

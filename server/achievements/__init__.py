@@ -102,7 +102,7 @@ def run_checks(device_name, coil, event, timestamp):
 # Import all achievement modules to trigger @register decorators
 # ---------------------------------------------------------------------------
 
-from achievements import (  # noqa: F401
+from . import (  # noqa: F401
     milestone_counts,
     duration_records,
     frequency_rate,

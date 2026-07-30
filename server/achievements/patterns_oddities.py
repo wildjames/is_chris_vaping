@@ -128,7 +128,6 @@ class WitchingHour(Achievement):
         midnight = ctx.timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
         diff = abs((ctx.timestamp - midnight).total_seconds())
         # Also check just before midnight (23:59:55+)
-        prev_midnight = midnight  # already today's midnight
         next_midnight = midnight + timedelta(days=1)
         diff_next = abs((next_midnight - ctx.timestamp).total_seconds())
         return diff <= 5 or diff_next <= 5
@@ -172,7 +171,7 @@ class PowerNap(Achievement):
 class PhantomPuff(Achievement):
     id = "phantom_puff"
     name = "Phantom Puff"
-    description = "A puff so short the firmware debounce almost caught it (exactly 0.5s)"
+    description = "A puff so short the firmware debounce almost caught it (~0.5s ±50ms)"
 
     def check(self, ctx):
         if ctx.event != "stopped":
