@@ -28,6 +28,33 @@
     font-size: 0.85rem;
     color: var(--text);
     cursor: default;
+    position: relative;
+}
+
+.device-achievements .achievement-badge[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-dark, #1a1a1a);
+    color: var(--text);
+    border: 1px solid var(--border-strong, var(--border));
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    white-space: normal;
+    width: max-content;
+    max-width: 250px;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 10;
+}
+
+.device-achievements .achievement-badge[data-tooltip]:hover::after {
+    opacity: 1;
 }
 
 .device-achievements .no-achievements {
