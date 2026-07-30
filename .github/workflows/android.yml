@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - '.github/workflows/android.yml'
 
 jobs:
   build-and-distribute:
@@ -31,7 +32,7 @@ jobs:
       - name: Build release APK
         working-directory: android
         env:
-          KEYSTORE_FILE: app/release.keystore
+          KEYSTORE_FILE: release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
