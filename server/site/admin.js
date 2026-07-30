@@ -1,9 +1,6 @@
 (function () {
     'use strict';
 
-    let activityChart = null;
-    let deviceChart = null;
-
     // --- Auth ---
 
     async function checkAuth() {
@@ -40,14 +37,10 @@
     function showDashboard() {
         document.getElementById('login-container').classList.add('hidden');
         document.getElementById('dashboard').classList.add('active');
-        loadDashboard();
+        loadDevices();
     }
 
     // --- Dashboard Data ---
-
-    async function loadDashboard() {
-        await Promise.all([loadDevices(), loadActivity()]);
-    }
 
     async function loadDevices() {
         const res = await fetch('/admin/devices');
@@ -58,22 +51,6 @@
         }
         const data = await res.json();
         const devices = data.devices;
-
-        document.getElementById('stat-devices').textContent = devices.length;
-        const activeCount = devices.filter(d => d.coil_a || d.coil_b).length;
-        document.getElementById('stat-active').textContent = activeCount;
-
-        // Populate device filter
-        const select = document.getElementById('chart-device');
-        const currentVal = select.value;
-        select.innerHTML = '<option value="">All Devices</option>';
-        devices.forEach(d => {
-            const opt = document.createElement('option');
-            opt.value = d.name;
-            opt.textContent = d.name;
-            if (d.name === currentVal) opt.selected = true;
-            select.appendChild(opt);
-        });
 
         // Render table
         const tbody = document.getElementById('device-tbody');
@@ -108,108 +85,13 @@
         });
     }
 
-    async function loadActivity() {
-        const days = document.getElementById('chart-days').value;
-        const device = document.getElementById('chart-device').value;
-        let url = '/admin/activity?days=' + days;
-        if (device) url += '&device=' + encodeURIComponent(device);
-
-        const res = await fetch(url);
-        if (res.status === 401) return;
-        const data = await res.json();
-
-        document.getElementById('stat-events-total').textContent = data.total_events;
-
-        const today = new Date().toISOString().split('T')[0];
-        const todayData = data.daily[today];
-        document.getElementById('stat-events-today').textContent =
-            todayData ? (todayData.started + todayData.stopped) : 0;
-
-        renderActivityChart(data, days);
-        renderDeviceChart(data);
-    }
-
-    function renderActivityChart(data, days) {
-        const ctx = document.getElementById('activity-chart').getContext('2d');
-        const useHourly = days <= 2;
-        const chartData = useHourly ? data.hourly : data.daily;
-
-        const labels = Object.keys(chartData).sort();
-        const started = labels.map(k => chartData[k].started || 0);
-        const stopped = labels.map(k => chartData[k].stopped || 0);
-
-        const displayLabels = labels.map(l => {
-            if (useHourly) return l.split(' ')[1] || l;
-            return l.substring(5);
-        });
-
-        if (activityChart) activityChart.destroy();
-        activityChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: displayLabels,
-                datasets: [
-                    {
-                        label: 'Started',
-                        data: started,
-                        backgroundColor: 'rgba(76, 175, 80, 0.7)',
-                        borderColor: '#4caf50',
-                        borderWidth: 1,
-                    },
-                    {
-                        label: 'Stopped',
-                        data: stopped,
-                        backgroundColor: 'rgba(233, 69, 96, 0.7)',
-                        borderColor: '#e94560',
-                        borderWidth: 1,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: '#aaa' } } },
-                scales: {
-                    x: { ticks: { color: '#aaa' }, grid: { color: '#333' } },
-                    y: { ticks: { color: '#aaa' }, grid: { color: '#333' }, beginAtZero: true },
-                },
-            },
-        });
-    }
-
-    function renderDeviceChart(data) {
-        const ctx = document.getElementById('device-chart').getContext('2d');
-        const deviceNames = Object.keys(data.per_device);
-        const startedCounts = deviceNames.map(d => data.per_device[d].started || 0);
-
-        if (deviceChart) deviceChart.destroy();
-        deviceChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: deviceNames,
-                datasets: [{
-                    data: startedCounts,
-                    backgroundColor: [
-                        '#e94560', '#4caf50', '#2196f3', '#ff9800', '#9c27b0',
-                        '#00bcd4', '#ffeb3b', '#795548',
-                    ],
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: '#aaa' }, position: 'right' } },
-            },
-        });
-    }
-
     // --- Actions ---
 
     async function deleteDevice(id, name) {
         if (!confirm('Delete device "' + name + '" and all its events? This cannot be undone.')) return;
         const res = await fetch('/admin/devices/' + id, { method: 'DELETE' });
         if (res.ok) {
-            loadDashboard();
+            loadDevices();
         } else {
             const data = await res.json();
             alert(data.error || 'Failed to delete device');
@@ -249,11 +131,6 @@
         }
     });
 
-    // Chart controls
-    document.getElementById('chart-days').addEventListener('change', loadActivity);
-    document.getElementById('chart-device').addEventListener('change', loadActivity);
-    document.getElementById('chart-refresh').addEventListener('click', loadDashboard);
-
     // --- Utils ---
 
     function escapeHtml(str) {
@@ -265,7 +142,7 @@
     // Auto-refresh every 30s
     setInterval(() => {
         if (document.getElementById('dashboard').classList.contains('active')) {
-            loadDashboard();
+            loadDevices();
         }
     }, 30000);
 

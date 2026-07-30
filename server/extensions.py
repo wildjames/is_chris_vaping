@@ -63,6 +63,7 @@ redis_client = redis.Redis(
 
 DEVICE_LIST_KEY = f"{REDIS_KEY}:devices"
 DEVICE_KEY_PREFIX = f"{REDIS_KEY}:device:"
+STATS_NOTIFY_CHANNEL = f"{REDIS_KEY}:stats_notify"
 
 # --- MariaDB (persistent) ---
 
@@ -178,6 +179,10 @@ def db_persist_vape_update(vape_name, coil, event, state, timestamp):
                 timestamp=timestamp,
             ))
             session.commit()
+            try:
+                redis_client.publish(STATS_NOTIFY_CHANNEL, "update")
+            except Exception:
+                logger.debug("Failed to publish stats notification")
         finally:
             session.close()
     except Exception:

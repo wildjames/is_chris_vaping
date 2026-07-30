@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stats - Is Chris Vaping?</title>
+    <link rel="stylesheet" href="common.css">
+    <link rel="stylesheet" href="stats.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+            integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+            crossorigin="anonymous"></script>
+</head>
+<body>
+    <header>
+        <h1>Who's chuffing right now: Statistics</h1>
+    </header>
+    <div class="container">
+        <div class="stats-row" id="summary-row">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-devices">-</div>
+                <div class="stat-label">Registered Vapes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-chuffs-1h">-</div>
+                <div class="stat-label">Chuffs (Last Hour)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-chuffs-6h">-</div>
+                <div class="stat-label">Chuffs (Last 6 Hours)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-chuffs-midnight">-</div>
+                <div class="stat-label">Chuffs (Since Midnight UTC)</div>
+            </div>
+        </div>
+
+        <div id="devices-container"></div>
+    </div>
+
+    <script src="stats.js"></script>
+</body>
+</html>
