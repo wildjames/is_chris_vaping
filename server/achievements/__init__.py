@@ -9,6 +9,17 @@ from achievements.base import (  # noqa: F401
     _registry,
     register,
 )
+from achievements import (  # noqa: F401
+    cumulative_lifetime,
+    dual_coil,
+    duration_records,
+    frequency_rate,
+    milestone_counts,
+    multi_device,
+    patterns_oddities,
+    streaks_consistency,
+    time_of_day,
+)
 from extensions import (
     ACHIEVEMENT_CHANNEL,
     Session,

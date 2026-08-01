@@ -321,6 +321,7 @@ class MainActivity : AppCompatActivity() {
                     .putString("server_url", url)
                     .putString("auth_token", tokenInput.text.toString().trim())
                     .apply()
+                FcmService.registerTokenForDevices(this@MainActivity)
             }
             .setNegativeButton("Cancel", null)
             .show()
