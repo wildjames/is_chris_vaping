@@ -16,16 +16,23 @@ jobs:
 
       - name: Determine version bump
         id: bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          MSG=$(git log -1 --pretty=%s)
-          if [[ "$MSG" =~ ^MAJOR ]]; then
+          TITLE=$(gh pr list --search "$(git rev-parse HEAD)" --state merged --json title --jq '.[0].title')
+          if [ -z "$TITLE" ]; then
+            echo "::error::Could not find merged PR for this commit"
+            exit 1
+          fi
+          echo "PR title: $TITLE"
+          if [[ "$TITLE" =~ ^MAJOR ]]; then
             echo "type=MAJOR" >> $GITHUB_OUTPUT
-          elif [[ "$MSG" =~ ^MINOR ]]; then
+          elif [[ "$TITLE" =~ ^MINOR ]]; then
             echo "type=MINOR" >> $GITHUB_OUTPUT
-          elif [[ "$MSG" =~ ^PATCH ]]; then
+          elif [[ "$TITLE" =~ ^PATCH ]]; then
             echo "type=PATCH" >> $GITHUB_OUTPUT
           else
-            echo "::error::Commit message must start with MAJOR, MINOR, or PATCH"
+            echo "::error::PR title must start with MAJOR, MINOR, or PATCH"
             exit 1
           fi
 
